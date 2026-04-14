@@ -1,16 +1,22 @@
 // frontend/src/hooks/useAutoSave.js
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 import { blockAPI } from '../services/api';
 import { renormalizeBlocks, needsRenormalization } from '../utils/blockUtils';
 
 const SAVE_DELAY = 1000; // 1 second debounce
 
-const useAutoSave = (documentId) => {
+const useAutoSave = (documentId, initialVersion) => {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
   const saveTimer = useRef(null);
   const abortControllerRef = useRef(null);
   const pendingVersionRef = useRef(0);     // Client-side version counter
-  const serverVersionRef = useRef(0);      // Last known server version
+  const serverVersionRef = useRef(initialVersion);
+
+  useEffect(() => {
+    if (initialVersion !== undefined && serverVersionRef.current === undefined) {
+      serverVersionRef.current = initialVersion;
+    }
+  }, [initialVersion]);
 
   const save = useCallback(
     async (blocks) => {
@@ -26,7 +32,7 @@ const useAutoSave = (documentId) => {
         abortControllerRef.current.abort();
       }
 
-      setSaveStatus('saving');
+      setSaveStatus((prev) => (prev === 'saving' ? prev : 'saving'));
 
       saveTimer.current = setTimeout(async () => {
         // Increment pending version before save

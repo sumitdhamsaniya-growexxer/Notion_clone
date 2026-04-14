@@ -73,4 +73,4 @@ CREATE TRIGGER update_blocks_updated_at
 -- Valid block types constraint
 ALTER TABLE blocks DROP CONSTRAINT IF EXISTS blocks_type_check;
 ALTER TABLE blocks ADD CONSTRAINT blocks_type_check
-  CHECK (type IN ('paragraph','heading_1','heading_2','todo','code','divider','image'));
+  CHECK (type IN ('paragraph','heading_1','heading_2','heading_3','heading_4','bullet_list','numbered_list','table','todo','code','file','divider','image'));

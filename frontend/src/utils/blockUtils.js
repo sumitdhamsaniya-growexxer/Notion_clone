@@ -6,8 +6,8 @@ export const createBlock = (type = 'paragraph', content = {}, orderIndex) => ({
   id: uuidv4(),
   type,
   content: type === 'todo'
-    ? { text: '', checked: false, ...content }
-    : { text: '', ...content },
+    ? { text: '', html: '', checked: false, ...content }
+    : { text: '', html: '', ...content },
   order_index: orderIndex,
   parent_id: null,
 });
@@ -145,8 +145,14 @@ export const BLOCK_TYPES = [
   { type: 'paragraph', label: 'Text', description: 'Plain text paragraph', icon: '¶', keywords: ['text', 'paragraph', 'p'] },
   { type: 'heading_1', label: 'Heading 1', description: 'Large section heading', icon: 'H1', keywords: ['h1', 'heading', 'title'] },
   { type: 'heading_2', label: 'Heading 2', description: 'Medium section heading', icon: 'H2', keywords: ['h2', 'heading', 'subtitle'] },
+  { type: 'heading_3', label: 'Heading 3', description: 'Small section heading', icon: 'H3', keywords: ['h3', 'heading'] },
+  { type: 'heading_4', label: 'Heading 4', description: 'Compact heading', icon: 'H4', keywords: ['h4', 'heading'] },
+  { type: 'bullet_list', label: 'Bulleted list', description: 'Create a bulleted list item', icon: '•', keywords: ['bullet', 'list', 'ul'] },
+  { type: 'numbered_list', label: 'Numbered list', description: 'Create a numbered list item', icon: '1.', keywords: ['numbered', 'list', 'ol'] },
+  { type: 'table', label: 'Table', description: 'Insert a basic editable table', icon: '▦', keywords: ['table', 'grid', 'rows', 'columns'] },
   { type: 'todo', label: 'To-do', description: 'Track tasks with checkbox', icon: '☑', keywords: ['todo', 'task', 'check', 'checkbox'] },
   { type: 'code', label: 'Code', description: 'Capture code snippet', icon: '<>', keywords: ['code', 'snippet', 'pre'] },
+  { type: 'file', label: 'Attach file', description: 'Upload and attach a file', icon: '📎', keywords: ['file', 'attach', 'upload'] },
   { type: 'divider', label: 'Divider', description: 'Horizontal divider line', icon: '—', keywords: ['divider', 'hr', 'separator', 'line'] },
   { type: 'image', label: 'Image', description: 'Embed image from URL', icon: '🖼', keywords: ['image', 'img', 'photo', 'picture', 'url'] },
 ];

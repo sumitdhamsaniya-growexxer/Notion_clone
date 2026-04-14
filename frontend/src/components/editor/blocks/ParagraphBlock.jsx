@@ -5,12 +5,12 @@ const ParagraphBlock = ({ block, onChange, onKeyDown, readOnly, autoFocus, curso
   const ref = useRef(null);
 
   useEffect(() => {
-    if (ref.current && block.content.text !== undefined) {
-      if (ref.current.innerText !== block.content.text) {
-        ref.current.innerText = block.content.text;
-      }
+    if (!ref.current || document.activeElement === ref.current) return;
+    const nextHtml = block.content.html ?? block.content.text ?? '';
+    if (ref.current.innerHTML !== nextHtml) {
+      ref.current.innerHTML = nextHtml;
     }
-  }, [block.content.text]);
+  }, [block.content.html, block.content.text]);
 
   useEffect(() => {
     if (autoFocus && ref.current) {
@@ -35,7 +35,7 @@ const ParagraphBlock = ({ block, onChange, onKeyDown, readOnly, autoFocus, curso
 
   const handleInput = () => {
     if (onChange) {
-      onChange({ text: ref.current.innerText });
+      onChange({ text: ref.current.innerText, html: ref.current.innerHTML });
     }
   };
 
@@ -47,7 +47,7 @@ const ParagraphBlock = ({ block, onChange, onKeyDown, readOnly, autoFocus, curso
       onInput={handleInput}
       onKeyDown={onKeyDown}
       data-placeholder="Type '/' for commands..."
-      className="w-full min-h-[1.5em] text-notion-text text-base leading-relaxed focus:outline-none"
+      className="w-full min-h-[1.5em] text-slate-900 dark:text-slate-100 text-base leading-relaxed focus:outline-none"
     />
   );
 };

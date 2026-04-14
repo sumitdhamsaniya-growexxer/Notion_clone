@@ -142,6 +142,7 @@ export const authAPI = {
 // Documents
 export const documentAPI = {
   getAll: () => api.get('/documents'),
+  search: (query) => api.get('/documents/search', { params: { q: query } }),
   create: (data) => api.post('/documents', data),
   get: (id) => api.get(`/documents/${id}`),
   update: (id, data) => api.patch(`/documents/${id}`, data),

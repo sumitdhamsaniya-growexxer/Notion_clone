@@ -1,9 +1,10 @@
 // frontend/src/components/editor/BlockEditor.jsx
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
-import { v4 as uuidv4 } from 'uuid';
+import { AnimatePresence, motion } from 'framer-motion';
 import Block from './Block';
 import SlashMenu from './SlashMenu';
+import InlineFormatToolbar from './InlineFormatToolbar';
 import {
   createBlock,
   getMidpointIndex,
@@ -12,14 +13,13 @@ import {
   setCursorToEnd,
   setCursorToStart,
   isCursorAtStart,
-  BLOCK_TYPES,
 } from '../../utils/blockUtils';
 import useAutoSave from '../../hooks/useAutoSave';
 import SaveIndicator from '../ui/SaveIndicator';
 
-const NON_EDITABLE_TYPES = ['divider', 'image'];
+const NON_EDITABLE_TYPES = ['divider', 'image', 'file', 'table'];
 
-const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleChange, onTitleBlur }) => {
+const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, documentTitle, onTitleChange, onTitleBlur }) => {
   const [blocks, setBlocks] = useState(
     initialBlocks.length > 0
       ? [...initialBlocks].sort((a, b) => a.order_index - b.order_index)
@@ -30,10 +30,10 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
   const [slashMenu, setSlashMenu] = useState(null);
   // slashMenu: { blockId, filter, position: {top, left} }
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [formatToolbar, setFormatToolbar] = useState(null);
   const titleRef = useRef(null);
-  const blockRefs = useRef({}); // blockId -> DOM element ref
 
-  const { saveStatus, save } = useAutoSave(documentId);
+  const { saveStatus, save } = useAutoSave(documentId, documentVersion);
 
   // Auto-save whenever blocks change
   useEffect(() => {
@@ -77,6 +77,95 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
     setSlashMenu(null);
   }, []);
 
+  const syncBlockFromDom = useCallback(
+    (blockId) => {
+      const el = getBlockElement(blockId);
+      if (!el) return;
+      const text = el.innerText || '';
+      const html = el.innerHTML || '';
+      setBlocks((prev) =>
+        prev.map((b) => (b.id === blockId ? { ...b, content: { ...b.content, text, html } } : b))
+      );
+    },
+    [getBlockElement]
+  );
+
+  const formatToolbarRef = useRef(null);
+
+  const setFormatToolbarIfChanged = useCallback((nextToolbar) => {
+    const prev = formatToolbarRef.current;
+    const equal =
+      prev?.blockId === nextToolbar?.blockId &&
+      prev?.position?.top === nextToolbar?.position?.top &&
+      prev?.position?.left === nextToolbar?.position?.left;
+
+    if (equal) return;
+
+    formatToolbarRef.current = nextToolbar;
+    setFormatToolbar(nextToolbar);
+  }, []);
+
+  useEffect(() => {
+    const updateToolbar = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        setFormatToolbarIfChanged(null);
+        return;
+      }
+
+      const anchorEl = selection.anchorNode?.parentElement;
+      const focusEl = selection.focusNode?.parentElement;
+      if (!anchorEl || !focusEl) {
+        setFormatToolbarIfChanged(null);
+        return;
+      }
+
+      const editableA = anchorEl.closest('[contenteditable="true"]');
+      const editableB = focusEl.closest('[contenteditable="true"]');
+      if (!editableA || !editableB || editableA !== editableB) {
+        setFormatToolbarIfChanged(null);
+        return;
+      }
+
+      if (editableA === titleRef.current || editableA.closest('.block-code')) {
+        setFormatToolbarIfChanged(null);
+        return;
+      }
+
+      const rect = selection.getRangeAt(0).getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) {
+        setFormatToolbarIfChanged(null);
+        return;
+      }
+
+      setFormatToolbarIfChanged({
+        blockId: editableA.closest('[data-block-id]')?.getAttribute('data-block-id') || null,
+        position: {
+          top: Math.max(8, rect.top - 48),
+          left: Math.max(8, rect.left + rect.width / 2 - 80),
+        },
+      });
+    };
+
+    document.addEventListener('selectionchange', updateToolbar);
+    window.addEventListener('scroll', updateToolbar, true);
+
+    return () => {
+      document.removeEventListener('selectionchange', updateToolbar);
+      window.removeEventListener('scroll', updateToolbar, true);
+    };
+  }, [setFormatToolbarIfChanged]);
+
+  const applyFormat = useCallback(
+    (command, value) => {
+      document.execCommand(command, false, value);
+      if (formatToolbar?.blockId) {
+        syncBlockFromDom(formatToolbar.blockId);
+      }
+    },
+    [formatToolbar, syncBlockFromDom]
+  );
+
   // =============================================
   // BLOCK CONTENT CHANGE
   // =============================================
@@ -116,10 +205,14 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
           // CRITICAL: Clear the slash text from content — no bleed
           const newContent =
             type === 'todo'
-              ? { text: '', checked: false }
+              ? { text: '', html: '', checked: false }
+              : type === 'table'
+              ? { rows: [['', '', ''], ['', '', ''], ['', '', '']] }
+              : type === 'file'
+              ? { name: '', mime: '', size: 0, url: '' }
               : type === 'divider' || type === 'image'
               ? {}
-              : { text: '' };
+              : { text: '', html: '' };
           return { ...b, type, content: newContent };
         })
       );
@@ -148,19 +241,39 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
 
       // ============================================
       // SLASH COMMAND — Open menu on '/' at start
+      // CRITICAL: Don't allow "/heading" text to enter block content.
       // ============================================
-      if (e.key === '/' && text === '' && !slashMenu) {
-        // Don't prevent default — let the '/' be typed first
-        setTimeout(() => {
-          const el = getBlockElement(blockId);
-          if (el) openSlashMenu(blockId, el);
-        }, 0);
+      if (e.key === '/' && text.trim() === '' && !slashMenu) {
+        e.preventDefault();
+        const el = getBlockElement(blockId);
+        if (el) openSlashMenu(blockId, el);
         return;
       }
 
       // If slash menu is open, it handles ArrowUp/Down/Enter/Escape via its own listener
       if (slashMenu && ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'].includes(e.key)) {
         return;
+      }
+
+      // While slash menu is open for this block, capture typing into menu filter
+      // and keep block content empty (no bleed).
+      if (slashMenu?.blockId === blockId) {
+        if (e.key === 'Backspace') {
+          e.preventDefault();
+          setSlashMenu((prev) => {
+            if (!prev) return null;
+            const next = prev.filter.slice(0, -1);
+            return { ...prev, filter: next };
+          });
+          return;
+        }
+
+        // Printable characters: update filter only.
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          setSlashMenu((prev) => (prev ? { ...prev, filter: prev.filter + e.key } : prev));
+          return;
+        }
       }
 
       // ============================================
@@ -183,8 +296,10 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
             if (b.id !== blockId) return b;
             const newContent =
               b.type === 'todo'
-                ? { text: textBefore, checked: b.content.checked }
-                : { text: textBefore };
+                ? { text: textBefore, html: textBefore, checked: b.content.checked }
+                : b.type === 'bullet_list' || b.type === 'numbered_list'
+                ? { text: textBefore, html: textBefore }
+                : { text: textBefore, html: textBefore };
             return { ...b, content: newContent };
           });
 
@@ -196,7 +311,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
           );
 
           // Create new paragraph block with text after cursor
-          const newBlock = createBlock('paragraph', { text: textAfter }, newOrderIndex);
+          const newBlock = createBlock('paragraph', { text: textAfter, html: textAfter }, newOrderIndex);
 
           const result = [
             ...updated.slice(0, blockIndex + 1),
@@ -229,8 +344,10 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
         if (atStart) {
           // If it's the FIRST block — no action (edge case: nothing to merge into)
           if (blockIndex === 0) {
-            // Convert heading/etc to paragraph if non-empty
-            if (currentBlock.type !== 'paragraph' && text.length > 0) {
+            // Defined behavior:
+            // - If first block is non-paragraph, Backspace at start converts it to paragraph (keeps content).
+            // - If it's already a paragraph, do nothing.
+            if (currentBlock.type !== 'paragraph') {
               e.preventDefault();
               setBlocks((prev) =>
                 prev.map((b) =>
@@ -238,7 +355,6 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
                 )
               );
             }
-            // If paragraph at start, no action
             return;
           }
 
@@ -282,7 +398,14 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
                 .filter((b) => b.id !== blockId)
                 .map((b) => {
                   if (b.id !== prevBlock.id) return b;
-                  return { ...b, content: { ...b.content, text: prevText + text } };
+                  return {
+                    ...b,
+                    content: {
+                      ...b.content,
+                      text: prevText + text,
+                      html: prevText + text,
+                    },
+                  };
                 });
 
               // Update prev block DOM
@@ -344,7 +467,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
             const text = b.content.text || '';
             const slashIdx = text.lastIndexOf('/');
             const cleaned = slashIdx !== -1 ? text.slice(0, slashIdx) : text;
-            return { ...b, content: { ...b.content, text: cleaned } };
+            return { ...b, content: { ...b.content, text: cleaned, html: cleaned } };
           })
         );
         // Update the DOM element
@@ -411,7 +534,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-16 py-12">
+    <div className="max-w-4xl mx-auto px-4 sm:px-8 lg:px-14 py-10 text-slate-900 dark:text-slate-100">
       {/* Save Indicator */}
       <div className="flex justify-end mb-2">
         <SaveIndicator status={saveStatus} />
@@ -430,7 +553,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
           onTitleBlur?.(e.currentTarget.innerText);
         }}
         data-placeholder="Untitled"
-        className="text-5xl font-bold text-notion-text mb-8 focus:outline-none leading-tight"
+        className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 dark:text-slate-100 mb-6 sm:mb-8 focus:outline-none leading-tight"
         style={{ minHeight: '1.2em', direction: 'ltr', unicodeBidi: 'plaintext' }}
       />
 
@@ -438,26 +561,35 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="blocks">
           {(provided) => (
-            <div
+            <motion.div
               {...provided.droppableProps}
               ref={provided.innerRef}
-              className="pl-6" // Extra left padding for drag handles
+              className="pl-4 md:pl-6"
             >
-              {blocks.map((block, index) => (
-                <div key={block.id} data-block-id={block.id}>
-                  <Block
-                    block={block}
-                    index={index}
-                    onKeyDown={handleKeyDown}
-                    onChange={handleBlockChange}
-                    onFocus={setFocusedBlockId}
-                    autoFocus={focusedBlockId === block.id}
-                    cursorPosition={focusCursorPosition}
-                  />
-                </div>
-              ))}
+              <AnimatePresence initial={false}>
+                {blocks.map((block, index) => (
+                  <motion.div
+                    key={block.id}
+                    data-block-id={block.id}
+                    initial={{ opacity: 0, x: -18, height: 0 }}
+                    animate={{ opacity: 1, x: 0, height: 'auto' }}
+                    exit={{ opacity: 0, x: 18, height: 0 }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                  >
+                    <Block
+                      block={block}
+                      index={index}
+                      onKeyDown={handleKeyDown}
+                      onChange={handleBlockChange}
+                      onFocus={setFocusedBlockId}
+                      autoFocus={focusedBlockId === block.id}
+                      cursorPosition={focusCursorPosition}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
               {provided.placeholder}
-            </div>
+            </motion.div>
           )}
         </Droppable>
       </DragDropContext>
@@ -470,6 +602,10 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentTitle, onTitleCha
           onSelect={handleSlashSelect}
           onClose={closeSlashMenu}
         />
+      )}
+
+      {formatToolbar && (
+        <InlineFormatToolbar position={formatToolbar.position} onFormat={applyFormat} />
       )}
 
       {/* Click below blocks to add paragraph */}

@@ -60,7 +60,21 @@ const createBlock = async (req, res, next) => {
     const { type = 'paragraph', content = { text: '' }, order_index, parent_id = null } = req.body;
 
     // Validate block type
-    const validTypes = ['paragraph', 'heading_1', 'heading_2', 'todo', 'code', 'divider', 'image'];
+    const validTypes = [
+      'paragraph',
+      'heading_1',
+      'heading_2',
+      'heading_3',
+      'heading_4',
+      'bullet_list',
+      'numbered_list',
+      'table',
+      'todo',
+      'code',
+      'file',
+      'divider',
+      'image',
+    ];
     if (!validTypes.includes(type)) {
       return res.status(422).json({
         success: false,
@@ -116,7 +130,21 @@ const updateBlock = async (req, res, next) => {
 
     // Validate block type if provided
     if (type) {
-      const validTypes = ['paragraph', 'heading_1', 'heading_2', 'todo', 'code', 'divider', 'image'];
+      const validTypes = [
+        'paragraph',
+        'heading_1',
+        'heading_2',
+        'heading_3',
+        'heading_4',
+        'bullet_list',
+        'numbered_list',
+        'table',
+        'todo',
+        'code',
+        'file',
+        'divider',
+        'image',
+      ];
       if (!validTypes.includes(type)) {
         return res.status(422).json({ success: false, message: 'Invalid block type.' });
       }
@@ -246,7 +274,21 @@ const batchSave = async (req, res, next) => {
       await client.query('BEGIN');
 
       for (const block of blocks) {
-        const validTypes = ['paragraph', 'heading_1', 'heading_2', 'todo', 'code', 'divider', 'image'];
+        const validTypes = [
+          'paragraph',
+          'heading_1',
+          'heading_2',
+          'heading_3',
+          'heading_4',
+          'bullet_list',
+          'numbered_list',
+          'table',
+          'todo',
+          'code',
+          'file',
+          'divider',
+          'image',
+        ];
         if (!validTypes.includes(block.type)) {
           throw new Error(`Invalid block type: ${block.type}`);
         }

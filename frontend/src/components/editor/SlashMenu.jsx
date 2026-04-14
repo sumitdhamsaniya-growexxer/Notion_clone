@@ -1,5 +1,6 @@
 // frontend/src/components/editor/SlashMenu.jsx
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { BLOCK_TYPES } from '../../utils/blockUtils';
 
 const SlashMenu = ({ position, filter, onSelect, onClose }) => {
@@ -48,41 +49,51 @@ const SlashMenu = ({ position, filter, onSelect, onClose }) => {
   }
 
   return (
-    <div
+    <motion.div
       ref={menuRef}
-      className="slash-menu"
+      initial={{ opacity: 0, scale: 0.92, y: -8 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, y: 4 }}
+      transition={{ duration: 0.16, ease: 'easeOut' }}
+      className="fixed z-50 bg-slate-900/95 border border-white/15 rounded-2xl shadow-2xl shadow-black/30 min-w-[240px] sm:min-w-[280px] max-w-[calc(100vw-2rem)] max-h-[320px] overflow-y-auto backdrop-blur-xl"
       style={{
         top: position.top,
-        left: position.left,
+        left: Math.min(position.left, window.innerWidth - 280),
       }}
     >
-      <div className="p-1">
-        <p className="text-xs text-notion-muted px-3 py-1.5 font-medium uppercase tracking-wide">
+      <div className="p-2">
+        <p className="text-xs text-slate-400 px-3 py-1.5 font-medium uppercase tracking-wide">
           Block types
         </p>
-        {filtered.map((bt, idx) => (
-          <button
+        <AnimatePresence>
+          {filtered.map((bt, idx) => (
+          <motion.button
             key={bt.type}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ delay: idx * 0.02 }}
             onClick={(e) => {
               e.preventDefault();
               onSelect(bt.type);
             }}
             onMouseEnter={() => setSelectedIndex(idx)}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-colors ${
-              idx === selectedIndex ? 'bg-indigo-50 text-indigo-700' : 'text-notion-text hover:bg-gray-50'
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+              idx === selectedIndex ? 'bg-indigo-500/20 text-indigo-200' : 'text-slate-100 hover:bg-white/10'
             }`}
           >
-            <span className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center text-sm font-bold flex-shrink-0">
+            <span className="w-8 h-8 bg-white/10 border border-white/15 rounded-lg flex items-center justify-center text-sm font-bold flex-shrink-0">
               {bt.icon}
             </span>
             <div>
               <p className="text-sm font-medium">{bt.label}</p>
-              <p className="text-xs text-notion-muted">{bt.description}</p>
+              <p className="text-xs text-slate-400">{bt.description}</p>
             </div>
-          </button>
+          </motion.button>
         ))}
+        </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

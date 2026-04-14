@@ -5,7 +5,7 @@ import React from 'react';
 const DividerBlock = () => {
   return (
     <div className="py-3 cursor-default select-none">
-      <hr className="border-notion-border" />
+      <hr className="border-slate-200 dark:border-slate-700" />
     </div>
   );
 };

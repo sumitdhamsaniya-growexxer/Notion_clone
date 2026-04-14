@@ -212,11 +212,41 @@ const disableSharing = async (req, res, next) => {
   }
 };
 
-// @route GET /api/share/:token — Public read-only document view
+// @route GET /api/documents/search?q=query
+const searchDocuments = async (req, res, next) => {
+  try {
+    const { q: searchQuery } = req.query;
+
+    if (!searchQuery || searchQuery.trim().length === 0) {
+      return res.status(400).json({ success: false, message: 'Search query is required.' });
+    }
+
+    const searchTerm = searchQuery.trim();
+
+    // Search in document titles and block content
+    const result = await query(`
+      SELECT DISTINCT d.id, d.title, d.is_public, d.share_token, d.updated_at, d.created_at
+      FROM documents d
+      LEFT JOIN blocks b ON d.id = b.document_id
+      WHERE d.user_id = $1
+        AND (
+          d.title ILIKE $2
+          OR b.content->>'text' ILIKE $2
+          OR b.content->>'html' ILIKE $2
+        )
+      ORDER BY d.updated_at DESC
+    `, [req.user.id, `%${searchTerm}%`]);
+
+    res.status(200).json({ success: true, documents: result.rows, query: searchTerm });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route GET /api/share/:token — Public read-only access via share token
 const getSharedDocument = async (req, res, next) => {
   try {
-    // Document already loaded by shareMiddleware
-    const doc = req.sharedDocument;
+    const doc = req.sharedDocument; // Populated by shareTokenAccess middleware
 
     const blocksResult = await query(
       `SELECT id, document_id, type, content, order_index, parent_id
@@ -245,4 +275,5 @@ module.exports = {
   enableSharing,
   disableSharing,
   getSharedDocument,
+  searchDocuments,
 };

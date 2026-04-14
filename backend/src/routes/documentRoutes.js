@@ -4,12 +4,14 @@ const { protect } = require('../middleware/authMiddleware');
 const {
   getDocuments, createDocument, getDocument,
   updateDocument, deleteDocument, enableSharing, disableSharing,
+  searchDocuments,
 } = require('../controllers/documentController');
 
 const router = express.Router();
 
 router.use(protect); // All document routes require auth
 
+router.get('/search', searchDocuments);
 router.get('/', getDocuments);
 router.post('/', createDocument);
 router.get('/:id', getDocument);

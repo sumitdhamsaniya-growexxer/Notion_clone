@@ -5,12 +5,14 @@ import { motion } from 'framer-motion';
 import { documentAPI } from '../services/api';
 import BlockEditor from '../components/editor/BlockEditor';
 import ShareModal from '../components/ui/ShareModal';
-import { FiArrowLeft, FiShare2 } from 'react-icons/fi';
+import { FiArrowLeft, FiShare2, FiSun, FiMoon } from 'react-icons/fi';
+import { useTheme } from '../context/ThemeContext';
 import toast from 'react-hot-toast';
 
 const Editor = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [document, setDocument] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,42 +73,61 @@ const Editor = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-indigo-400/40 border-t-indigo-400 rounded-full animate-spin" />
+          <p className="text-sm animate-pulse">Loading document...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-notion-bg">
+    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100">
       {/* Toolbar */}
-      <header className="fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur-sm border-b border-notion-border h-12 flex items-center px-4 gap-4">
-        <button
+      <motion.header
+        initial={{ y: -30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="fixed top-0 left-0 right-0 z-40 bg-white/80 dark:bg-slate-950/60 backdrop-blur-xl border-b border-slate-200 dark:border-white/10 h-14 flex items-center px-3 sm:px-4 md:px-6 gap-2 sm:gap-4"
+      >
+        <motion.button
           onClick={() => navigate('/')}
-          className="flex items-center gap-1.5 text-sm text-notion-muted hover:text-notion-text transition-colors"
+          whileHover={{ x: -4 }}
+          className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors"
         >
           <FiArrowLeft size={14} /> Back
-        </button>
+        </motion.button>
 
-        <div className="flex-1 text-center">
-          <span className="text-sm text-notion-muted truncate max-w-xs block">
+          <span className="text-sm text-slate-600 dark:text-slate-300 truncate max-w-[120px] sm:max-w-xs block flex-1 text-center">
             {document?.title || 'Untitled'}
           </span>
-        </div>
 
-        <button
-          onClick={() => setShowShare(true)}
-          className="flex items-center gap-1.5 text-sm text-notion-muted hover:text-notion-text transition-colors"
+        <motion.button
+          onClick={toggleTheme}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.98 }}
+          className="hidden sm:flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
         >
-          <FiShare2 size={14} /> Share
-        </button>
-      </header>
+          {theme === 'dark' ? <FiSun size={14} /> : <FiMoon size={14} />}
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </motion.button>
+
+        <motion.button
+          onClick={() => setShowShare(true)}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.98 }}
+          className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+        >
+          <FiShare2 size={14} /> <span className="hidden sm:inline">Share</span>
+        </motion.button>
+      </motion.header>
 
       {/* Editor */}
-      <div className="pt-12">
+      <div className="pt-14">
         <BlockEditor
           documentId={id}
           initialBlocks={blocks}
+          documentVersion={document?.version}
           documentTitle={document?.title || ''}
           onTitleChange={handleTitleChange}
           onTitleBlur={handleTitleBlur}

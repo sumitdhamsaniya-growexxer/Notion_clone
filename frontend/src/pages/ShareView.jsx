@@ -39,8 +39,8 @@ const ShareView = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <FiAlertCircle size={48} className="mx-auto text-red-400 mb-4" />
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">Not Available</h2>
-          <p className="text-gray-500">{error}</p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-gray-700 mb-2">Not Available</h2>
+          <p className="text-slate-600 dark:text-gray-500">{error}</p>
         </div>
       </div>
     );
@@ -49,18 +49,18 @@ const ShareView = () => {
   const { document, blocks } = data;
 
   return (
-    <div className="min-h-screen bg-notion-bg">
+    <div className="min-h-screen bg-white dark:bg-slate-950">
       {/* Read-only banner */}
-      <div className="bg-yellow-50 border-b border-yellow-200 text-yellow-800 text-xs text-center py-2 px-4">
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 text-xs text-center py-2 px-4">
         🔒 This is a read-only shared view. You cannot edit this document.
       </div>
 
-      <div className="max-w-3xl mx-auto px-16 py-12">
+      <div className="max-w-3xl mx-auto px-4 sm:px-8 md:px-16 py-8 sm:py-12">
         {/* Title */}
-        <h1 className="text-5xl font-bold text-notion-text mb-2 leading-tight">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-slate-900 dark:text-slate-100 mb-2 leading-tight">
           {document.title || 'Untitled'}
         </h1>
-        <p className="text-sm text-notion-muted mb-10">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-10">
           Last edited {formatDistanceToNow(new Date(document.updated_at), { addSuffix: true })}
         </p>
 
@@ -79,7 +79,7 @@ const ShareView = () => {
         </div>
 
         {blocks.length === 0 && (
-          <p className="text-notion-muted italic">This document is empty.</p>
+          <p className="text-slate-500 dark:text-slate-400 italic">This document is empty.</p>
         )}
       </div>
     </div>
