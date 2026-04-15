@@ -189,12 +189,17 @@ const deleteBlock = async (req, res, next) => {
       return res.status(ownership.status).json({ success: false, message: ownership.error });
     }
 
-    await query(
-      'DELETE FROM blocks WHERE id = $1 AND document_id = $2',
+    // Soft delete: set deleted_at timestamp
+    const result = await query(
+      'UPDATE blocks SET deleted_at = NOW() WHERE id = $1 AND document_id = $2 AND deleted_at IS NULL',
       [blockId, documentId]
     );
 
-    res.status(200).json({ success: true, message: 'Block deleted.' });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Block not found or already deleted.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Block moved to trash.' });
   } catch (err) {
     next(err);
   }
@@ -334,4 +339,77 @@ const batchSave = async (req, res, next) => {
   }
 };
 
-module.exports = { createBlock, updateBlock, deleteBlock, reorderBlocks, batchSave };
+// @route GET /api/documents/:documentId/blocks/trash
+const getTrashedBlocks = async (req, res, next) => {
+  try {
+    const { documentId } = req.params;
+
+    const ownership = await verifyOwnership(documentId, req.user.id);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ success: false, message: ownership.error });
+    }
+
+    const result = await query(
+      'SELECT id, document_id, type, content, order_index, parent_id, deleted_at, created_at, updated_at FROM blocks WHERE document_id = $1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC',
+      [documentId]
+    );
+
+    res.status(200).json({ success: true, blocks: result.rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route POST /api/documents/:documentId/blocks/:blockId/restore
+const restoreBlock = async (req, res, next) => {
+  try {
+    const { documentId, blockId } = req.params;
+
+    const ownership = await verifyOwnership(documentId, req.user.id);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ success: false, message: ownership.error });
+    }
+
+    // Restore: set deleted_at to NULL
+    const result = await query(
+      'UPDATE blocks SET deleted_at = NULL WHERE id = $1 AND document_id = $2 AND deleted_at IS NOT NULL',
+      [blockId, documentId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Block not found in trash.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Block restored.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route DELETE /api/documents/:documentId/blocks/:blockId/permanent
+const permanentDeleteBlock = async (req, res, next) => {
+  try {
+    const { documentId, blockId } = req.params;
+
+    const ownership = await verifyOwnership(documentId, req.user.id);
+    if (!ownership.ok) {
+      return res.status(ownership.status).json({ success: false, message: ownership.error });
+    }
+
+    // Permanent delete: actually remove from database
+    const result = await query(
+      'DELETE FROM blocks WHERE id = $1 AND document_id = $2 AND deleted_at IS NOT NULL',
+      [blockId, documentId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Block not found in trash.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Block permanently deleted.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createBlock, updateBlock, deleteBlock, reorderBlocks, batchSave, getTrashedBlocks, restoreBlock, permanentDeleteBlock };

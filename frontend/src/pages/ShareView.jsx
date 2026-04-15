@@ -28,19 +28,19 @@ const ShareView = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen luxury-shell flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-amber-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen luxury-shell flex items-center justify-center">
         <div className="text-center">
           <FiAlertCircle size={48} className="mx-auto text-red-400 mb-4" />
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-gray-700 mb-2">Not Available</h2>
-          <p className="text-slate-600 dark:text-gray-500">{error}</p>
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-amber-50 mb-2">Not Available</h2>
+          <p className="text-slate-600 dark:text-amber-100/70">{error}</p>
         </div>
       </div>
     );
@@ -49,7 +49,7 @@ const ShareView = () => {
   const { document, blocks } = data;
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950">
+    <div className="min-h-screen luxury-shell">
       {/* Read-only banner */}
       <div className="bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 text-xs text-center py-2 px-4">
         🔒 This is a read-only shared view. You cannot edit this document.

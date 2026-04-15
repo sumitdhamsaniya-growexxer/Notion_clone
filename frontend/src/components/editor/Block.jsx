@@ -2,7 +2,7 @@
 import React, { useRef, useState, useCallback } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMenu } from 'react-icons/fi';
+import { FiMenu, FiTrash2 } from 'react-icons/fi';
 import ParagraphBlock from './blocks/ParagraphBlock';
 import HeadingBlock from './blocks/HeadingBlock';
 import TodoBlock from './blocks/TodoBlock';
@@ -36,6 +36,7 @@ const Block = ({
   onKeyDown,
   onChange,
   onFocus,
+  onDelete,
   readOnly = false,
   autoFocus = false,
   cursorPosition = 'end',
@@ -78,6 +79,23 @@ const Block = ({
         >
           <FiMenu size={14} />
         </div>
+      )}
+
+      {/* Delete Button */}
+      {!readOnly && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.(block.id);
+          }}
+          className={`flex-shrink-0 mt-1 p-1 rounded-lg text-slate-500 hover:bg-rose-50 dark:hover:bg-rose-500/20 hover:text-rose-600 dark:hover:text-rose-300 transition-all ${
+            isHovered ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ marginLeft: '-8px' }}
+          title="Delete block"
+        >
+          <FiTrash2 size={14} />
+        </button>
       )}
 
       {/* Block Content */}

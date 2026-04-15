@@ -18,9 +18,9 @@ const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-200">
+      <div className="min-h-screen luxury-shell flex items-center justify-center text-slate-700 dark:text-amber-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-indigo-400/40 border-t-indigo-400 rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-amber-300/20 border-t-amber-300 rounded-full animate-spin" />
           <p className="text-sm animate-pulse">Loading workspace...</p>
         </div>
       </div>

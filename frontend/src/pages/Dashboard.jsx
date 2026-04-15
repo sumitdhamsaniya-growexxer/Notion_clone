@@ -6,9 +6,18 @@ import { formatDistanceToNow } from 'date-fns';
 import { documentAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { FiPlus, FiTrash2, FiEdit2, FiCheck, FiX, FiFileText, FiLogOut, FiStar, FiShield, FiZap, FiSearch, FiMenu } from 'react-icons/fi';
+import DocumentTrashView from '../components/DocumentTrashView';
 import toast from 'react-hot-toast';
 
 const SEARCH_DEBOUNCE_MS = 300;
+
+const sortDocuments = (docs) => [...docs].sort((a, b) => {
+  if (Boolean(b.is_bookmarked) !== Boolean(a.is_bookmarked)) {
+    return Number(Boolean(b.is_bookmarked)) - Number(Boolean(a.is_bookmarked));
+  }
+
+  return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+});
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -23,6 +32,7 @@ const Dashboard = () => {
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -35,8 +45,9 @@ const Dashboard = () => {
   const fetchDocuments = async () => {
     try {
       const { data } = await documentAPI.getAll();
-      setDocuments(data.documents);
-      setAllDocuments(data.documents);
+      const sortedDocuments = sortDocuments(data.documents);
+      setDocuments(sortedDocuments);
+      setAllDocuments(sortedDocuments);
     } catch {
       toast.error('Failed to load documents.');
     } finally {
@@ -56,7 +67,7 @@ const Dashboard = () => {
     setSearchPerformed(true);
     try {
       const { data } = await documentAPI.search(term);
-      setDocuments(data.documents);
+      setDocuments(sortDocuments(data.documents));
     } catch {
       toast.error('Search failed.');
       setDocuments(allDocuments);
@@ -103,6 +114,7 @@ const Dashboard = () => {
     try {
       await documentAPI.delete(docId);
       setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      setAllDocuments((prev) => prev.filter((d) => d.id !== docId));
       toast.success('Document deleted.');
     } catch {
       toast.error('Failed to delete.');
@@ -119,12 +131,40 @@ const Dashboard = () => {
     if (!editingTitle.trim()) return;
     try {
       await documentAPI.update(docId, { title: editingTitle.trim() });
-      setDocuments((prev) =>
+      setDocuments((prev) => sortDocuments(
         prev.map((d) => (d.id === docId ? { ...d, title: editingTitle.trim() } : d))
-      );
+      ));
+      setAllDocuments((prev) => sortDocuments(
+        prev.map((d) => (d.id === docId ? { ...d, title: editingTitle.trim() } : d))
+      ));
       setEditingId(null);
     } catch {
       toast.error('Failed to rename.');
+    }
+  };
+
+  const handleToggleBookmark = async (e, doc) => {
+    e.stopPropagation();
+
+    const nextBookmarkedState = !doc.is_bookmarked;
+    const applyBookmarkState = (items) => sortDocuments(
+      items.map((item) => (item.id === doc.id ? { ...item, is_bookmarked: nextBookmarkedState } : item))
+    );
+
+    setDocuments((prev) => applyBookmarkState(prev));
+    setAllDocuments((prev) => applyBookmarkState(prev));
+
+    try {
+      await documentAPI.toggleBookmark(doc.id, nextBookmarkedState);
+      toast.success(nextBookmarkedState ? 'Document bookmarked.' : 'Bookmark removed.');
+    } catch {
+      setDocuments((prev) => sortDocuments(
+        prev.map((item) => (item.id === doc.id ? { ...item, is_bookmarked: doc.is_bookmarked } : item))
+      ));
+      setAllDocuments((prev) => sortDocuments(
+        prev.map((item) => (item.id === doc.id ? { ...item, is_bookmarked: doc.is_bookmarked } : item))
+      ));
+      toast.error('Failed to update bookmark.');
     }
   };
 
@@ -133,8 +173,12 @@ const Dashboard = () => {
     navigate('/login');
   };
 
+  const handleDocumentRestored = () => {
+    fetchDocuments();
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen luxury-shell text-slate-900 dark:text-amber-50">
       <div className="border-b border-slate-200 dark:border-white/10 backdrop-blur-xl bg-slate-50/80 dark:bg-white/5 sticky top-0 z-30">
         <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-2 sm:gap-3">
           {/* Logo */}
@@ -410,13 +454,14 @@ const Dashboard = () => {
                         <div className="min-w-0">
                           <p className="font-medium truncate">{doc.title || 'Untitled'}</p>
                           <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {doc.is_bookmarked && <span className="mr-2 text-amber-500 dark:text-amber-300">Bookmarked</span>}
                             Edited {formatDistanceToNow(new Date(doc.updated_at), { addSuffix: true })}
                             {doc.is_public && <span className="ml-2 text-cyan-600 dark:text-cyan-300">• Shared</span>}
                           </p>
                         </div>
                       )}
                     </div>
-                    <div className="ml-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className={`ml-3 flex items-center gap-1 transition-opacity ${doc.is_bookmarked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                       {editingId === doc.id ? (
                         <>
                           <button onClick={(e) => { e.stopPropagation(); saveTitle(doc.id); }} className="p-2 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-300"><FiCheck size={14} /></button>
@@ -424,6 +469,15 @@ const Dashboard = () => {
                         </>
                       ) : (
                         <>
+                          <button
+                            onClick={(e) => handleToggleBookmark(e, doc)}
+                            className={`p-2 rounded-lg transition-colors ${doc.is_bookmarked
+                              ? 'text-amber-500 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/15'
+                              : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-amber-500 dark:hover:text-amber-300'}`}
+                            title={doc.is_bookmarked ? 'Remove bookmark' : 'Bookmark document'}
+                          >
+                            <FiStar size={14} fill={doc.is_bookmarked ? 'currentColor' : 'none'} />
+                          </button>
                           <button onClick={(e) => startEditing(e, doc)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300"><FiEdit2 size={14} /></button>
                           <button onClick={(e) => handleDelete(e, doc.id)} className="p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/20 text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-300"><FiTrash2 size={14} /></button>
                         </>
@@ -437,12 +491,30 @@ const Dashboard = () => {
         </section>
       </main>
 
+      {/* Trash Icon - Bottom Left */}
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={() => setIsTrashOpen(true)}
+        className="fixed bottom-6 left-6 p-3 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg hover:shadow-xl transition-all duration-200 z-40"
+        title="View deleted documents"
+      >
+        <FiTrash2 size={20} />
+      </motion.button>
+
       <footer className="border-t border-slate-200 dark:border-white/10 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 text-sm text-slate-500 dark:text-slate-400 flex flex-col md:flex-row gap-2 md:items-center md:justify-between">
           <p>Crafted for a premium writing experience.</p>
           <p>NoteGrid • Modern Tailwind UI</p>
         </div>
       </footer>
+
+      {/* Document Trash View */}
+      <DocumentTrashView
+        isOpen={isTrashOpen}
+        onClose={() => setIsTrashOpen(false)}
+        onRestore={handleDocumentRestored}
+      />
     </div>
   );
 };

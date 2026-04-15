@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { documentAPI } from '../services/api';
 import BlockEditor from '../components/editor/BlockEditor';
 import ShareModal from '../components/ui/ShareModal';
-import { FiArrowLeft, FiShare2, FiSun, FiMoon } from 'react-icons/fi';
+import { FiArrowLeft, FiShare2, FiSun, FiMoon, FiStar } from 'react-icons/fi';
 import { useTheme } from '../context/ThemeContext';
 import toast from 'react-hot-toast';
 
@@ -71,11 +71,29 @@ const Editor = () => {
     }
   };
 
+  const handleToggleBookmark = async () => {
+    if (!document) return;
+
+    const previousValue = Boolean(document.is_bookmarked);
+    const nextValue = !previousValue;
+
+    setDocument((prev) => ({ ...prev, is_bookmarked: nextValue }));
+
+    try {
+      const { data } = await documentAPI.toggleBookmark(id, nextValue);
+      setDocument((prev) => ({ ...prev, ...data.document }));
+      toast.success(nextValue ? 'Document bookmarked.' : 'Bookmark removed.');
+    } catch {
+      setDocument((prev) => ({ ...prev, is_bookmarked: previousValue }));
+      toast.error('Failed to update bookmark.');
+    }
+  };
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200">
+      <div className="min-h-screen luxury-shell flex items-center justify-center text-slate-700 dark:text-amber-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-4 border-indigo-400/40 border-t-indigo-400 rounded-full animate-spin" />
+          <div className="w-10 h-10 border-4 border-amber-300/20 border-t-amber-300 rounded-full animate-spin" />
           <p className="text-sm animate-pulse">Loading document...</p>
         </div>
       </div>
@@ -83,7 +101,7 @@ const Editor = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100">
+    <div className="min-h-screen luxury-shell text-slate-900 dark:text-amber-50">
       {/* Toolbar */}
       <motion.header
         initial={{ y: -30, opacity: 0 }}
@@ -101,6 +119,20 @@ const Editor = () => {
           <span className="text-sm text-slate-600 dark:text-slate-300 truncate max-w-[120px] sm:max-w-xs block flex-1 text-center">
             {document?.title || 'Untitled'}
           </span>
+
+        <motion.button
+          onClick={handleToggleBookmark}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.98 }}
+          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-xl border transition-colors ${
+            document?.is_bookmarked
+              ? 'border-amber-300/50 bg-amber-50 text-amber-700 dark:border-amber-300/20 dark:bg-amber-400/10 dark:text-amber-200'
+              : 'border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-white/5 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10'
+          }`}
+        >
+          <FiStar size={14} fill={document?.is_bookmarked ? 'currentColor' : 'none'} />
+          <span className="hidden sm:inline">{document?.is_bookmarked ? 'Bookmarked' : 'Bookmark'}</span>
+        </motion.button>
 
         <motion.button
           onClick={toggleTheme}

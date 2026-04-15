@@ -17,7 +17,9 @@ CREATE TABLE IF NOT EXISTS documents (
   title       VARCHAR(500) NOT NULL DEFAULT 'Untitled',
   share_token VARCHAR(64) UNIQUE,
   is_public   BOOLEAN NOT NULL DEFAULT FALSE,
+  is_bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
   version     INTEGER NOT NULL DEFAULT 0,
+  deleted_at  TIMESTAMPTZ,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS blocks (
   content       JSONB NOT NULL DEFAULT '{}',
   order_index   DECIMAL(20, 10) NOT NULL,
   parent_id     UUID REFERENCES blocks(id) ON DELETE SET NULL,
+  deleted_at    TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -44,12 +47,24 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 );
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_documents_share_token ON documents(share_token);
-CREATE INDEX IF NOT EXISTS idx_blocks_document_id ON blocks(document_id);
-CREATE INDEX IF NOT EXISTS idx_blocks_order_index ON blocks(document_id, order_index);
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token ON refresh_tokens(token);
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_blocks_document_id ON blocks(document_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_blocks_order_index ON blocks(document_id, order_index) WHERE deleted_at IS NULL;
+
+-- Add deleted_at columns if they don't exist (for backward compatibility)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_bookmarked BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE blocks ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- Update existing indexes to include deleted_at filter
+DROP INDEX IF EXISTS idx_documents_user_id;
+CREATE INDEX idx_documents_user_id ON documents(user_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_blocks_document_id ON blocks(document_id) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_blocks_order_index ON blocks(document_id, order_index) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_blocks_deleted_at ON blocks(document_id, deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_documents_deleted_at ON documents(user_id, deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_documents_bookmarked ON documents(user_id, is_bookmarked, updated_at DESC) WHERE deleted_at IS NULL;
 
 -- Auto-update updated_at on documents
 CREATE OR REPLACE FUNCTION update_updated_at_column()

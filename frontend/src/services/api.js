@@ -146,9 +146,14 @@ export const documentAPI = {
   create: (data) => api.post('/documents', data),
   get: (id) => api.get(`/documents/${id}`),
   update: (id, data) => api.patch(`/documents/${id}`, data),
+  toggleBookmark: (id, isBookmarked) => api.patch(`/documents/${id}`, { is_bookmarked: isBookmarked }),
   delete: (id) => api.delete(`/documents/${id}`),
   enableShare: (id) => api.post(`/documents/${id}/share`),
   disableShare: (id) => api.delete(`/documents/${id}/share`),
+  // Trash functionality
+  getTrashed: () => api.get('/documents/trash'),
+  restore: (id) => api.post(`/documents/${id}/restore`),
+  permanentDelete: (id) => api.delete(`/documents/${id}/permanent`),
 };
 
 // Blocks
@@ -159,6 +164,10 @@ export const blockAPI = {
   reorder: (docId, blocks) => api.post(`/documents/${docId}/blocks/reorder`, { blocks }),
   batchSave: (docId, blocks, version) =>
     api.post(`/documents/${docId}/blocks/batch`, { blocks, documentVersion: version }),
+  // Trash functionality
+  getTrashed: (docId) => api.get(`/documents/${docId}/blocks/trash`),
+  restore: (docId, blockId) => api.post(`/documents/${docId}/blocks/${blockId}/restore`),
+  permanentDelete: (docId, blockId) => api.delete(`/documents/${docId}/blocks/${blockId}/permanent`),
 };
 
 // Share (read-only, no auth needed)

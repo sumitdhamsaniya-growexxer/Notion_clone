@@ -30,7 +30,7 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 text-slate-900 dark:text-slate-100 px-4 py-10">
+    <div className="min-h-screen luxury-shell text-slate-900 dark:text-amber-50 px-4 py-10">
       <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8 items-center min-h-[80vh]">
         <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="hidden lg:block">
           <motion.div

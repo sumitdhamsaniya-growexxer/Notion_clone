@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --luxury-black: #070604;
+  --luxury-black-soft: #110d07;
+  --luxury-gold: #d6ad46;
+  --luxury-gold-soft: rgba(214, 173, 70, 0.18);
+  --luxury-text: #f6ebc8;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -20,11 +28,75 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
 .dark body {
-  background: #0f172a;
-  color: #e2e8f0;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(214, 173, 70, 0.2), transparent 24%),
+    radial-gradient(circle at 82% 12%, rgba(247, 206, 97, 0.14), transparent 20%),
+    radial-gradient(circle at 50% 120%, rgba(161, 113, 27, 0.22), transparent 28%),
+    linear-gradient(135deg, #050403 0%, #110d07 38%, #050403 100%);
+  color: var(--luxury-text);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.02), transparent 28%, rgba(214, 173, 70, 0.03) 55%, transparent 72%),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: auto, 120px 120px, 120px 120px;
+  opacity: 0.5;
+  z-index: -2;
+}
+
+::selection {
+  background: rgba(214, 173, 70, 0.35);
+  color: #fff8e2;
+}
+
+.luxury-shell {
+  position: relative;
+  isolation: isolate;
+  background: #ffffff;
+}
+
+.luxury-shell::before,
+.luxury-shell::after {
+  content: "";
+  position: absolute;
+  inset: auto;
+  pointer-events: none;
+  filter: blur(70px);
+  z-index: -1;
+}
+
+.luxury-shell::before {
+  top: 5%;
+  left: -8%;
+  width: 22rem;
+  height: 22rem;
+  background: radial-gradient(circle, rgba(214, 173, 70, 0.26), transparent 68%);
+}
+
+.luxury-shell::after {
+  right: -8%;
+  bottom: 8%;
+  width: 26rem;
+  height: 26rem;
+  background: radial-gradient(circle, rgba(121, 81, 20, 0.22), transparent 70%);
+}
+
+.dark .luxury-shell {
+  color: #f8f0d7;
+  background:
+    radial-gradient(circle at top left, rgba(214, 173, 70, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(141, 93, 14, 0.18), transparent 24%),
+    linear-gradient(180deg, rgba(20, 16, 11, 0.92) 0%, rgba(8, 6, 4, 0.96) 100%);
 }
 
 /* Contenteditable blocks */
@@ -127,4 +199,3 @@ body {
     font-size: 16px;
   }
 }
-

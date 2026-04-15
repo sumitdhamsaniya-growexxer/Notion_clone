@@ -6,12 +6,12 @@ const { query } = require('../config/database');
 // @route GET /api/documents
 const getDocuments = async (req, res, next) => {
   try {
-    // Only returns documents belonging to authenticated user
+    // Only returns documents belonging to authenticated user (exclude deleted)
     const result = await query(
-      `SELECT id, title, is_public, share_token, updated_at, created_at
+      `SELECT id, title, is_public, is_bookmarked, share_token, updated_at, created_at
        FROM documents
-       WHERE user_id = $1
-       ORDER BY updated_at DESC`,
+       WHERE user_id = $1 AND deleted_at IS NULL
+       ORDER BY is_bookmarked DESC, updated_at DESC`,
       [req.user.id]
     );
 
@@ -29,7 +29,7 @@ const createDocument = async (req, res, next) => {
     const result = await query(
       `INSERT INTO documents (user_id, title)
        VALUES ($1, $2)
-       RETURNING id, user_id, title, is_public, share_token, updated_at, created_at`,
+       RETURNING id, user_id, title, is_public, is_bookmarked, share_token, updated_at, created_at`,
       [req.user.id, title]
     );
 
@@ -73,11 +73,11 @@ const getDocument = async (req, res, next) => {
       });
     }
 
-    // Fetch all blocks ordered by order_index
+    // Fetch all blocks ordered by order_index (exclude deleted)
     const blocksResult = await query(
       `SELECT id, document_id, type, content, order_index, parent_id, created_at
        FROM blocks
-       WHERE document_id = $1
+       WHERE document_id = $1 AND deleted_at IS NULL
        ORDER BY order_index ASC`,
       [id]
     );
@@ -96,7 +96,7 @@ const getDocument = async (req, res, next) => {
 const updateDocument = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { title } = req.body;
+    const { title, is_bookmarked: isBookmarked } = req.body;
 
     // Ownership check
     const existing = await query('SELECT user_id FROM documents WHERE id = $1', [id]);
@@ -117,6 +117,12 @@ const updateDocument = async (req, res, next) => {
       paramIndex++;
     }
 
+    if (isBookmarked !== undefined) {
+      fields.push(`is_bookmarked = $${paramIndex}`);
+      values.push(Boolean(isBookmarked));
+      paramIndex++;
+    }
+
     if (fields.length === 0) {
       return res.status(400).json({ success: false, message: 'No fields to update.' });
     }
@@ -124,7 +130,7 @@ const updateDocument = async (req, res, next) => {
     values.push(id);
     const result = await query(
       `UPDATE documents SET ${fields.join(', ')} WHERE id = $${paramIndex}
-       RETURNING id, title, is_public, share_token, updated_at`,
+       RETURNING id, title, is_public, is_bookmarked, share_token, updated_at`,
       values
     );
 
@@ -147,10 +153,17 @@ const deleteDocument = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Access denied.' });
     }
 
-    // Cascade deletes blocks automatically via FK constraint
-    await query('DELETE FROM documents WHERE id = $1', [id]);
+    // Soft delete: set deleted_at timestamp
+    const result = await query(
+      'UPDATE documents SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL',
+      [id]
+    );
 
-    res.status(200).json({ success: true, message: 'Document deleted.' });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found or already deleted.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Document moved to trash.' });
   } catch (err) {
     next(err);
   }
@@ -225,7 +238,7 @@ const searchDocuments = async (req, res, next) => {
 
     // Search in document titles and block content
     const result = await query(`
-      SELECT DISTINCT d.id, d.title, d.is_public, d.share_token, d.updated_at, d.created_at
+      SELECT DISTINCT d.id, d.title, d.is_public, d.is_bookmarked, d.share_token, d.updated_at, d.created_at
       FROM documents d
       LEFT JOIN blocks b ON d.id = b.document_id
       WHERE d.user_id = $1
@@ -234,7 +247,7 @@ const searchDocuments = async (req, res, next) => {
           OR b.content->>'text' ILIKE $2
           OR b.content->>'html' ILIKE $2
         )
-      ORDER BY d.updated_at DESC
+      ORDER BY d.is_bookmarked DESC, d.updated_at DESC
     `, [req.user.id, `%${searchTerm}%`]);
 
     res.status(200).json({ success: true, documents: result.rows, query: searchTerm });
@@ -266,6 +279,78 @@ const getSharedDocument = async (req, res, next) => {
   }
 };
 
+// @route GET /api/documents/trash
+const getTrashedDocuments = async (req, res, next) => {
+  try {
+    const result = await query(
+      'SELECT id, title, is_public, is_bookmarked, share_token, deleted_at, updated_at, created_at FROM documents WHERE user_id = $1 AND deleted_at IS NOT NULL ORDER BY deleted_at DESC',
+      [req.user.id]
+    );
+
+    res.status(200).json({ success: true, documents: result.rows });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route POST /api/documents/:id/restore
+const restoreDocument = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await query('SELECT user_id FROM documents WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found.' });
+    }
+    if (existing.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    // Restore: set deleted_at to NULL
+    const result = await query(
+      'UPDATE documents SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found in trash.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Document restored.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// @route DELETE /api/documents/:id/permanent
+const permanentDeleteDocument = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await query('SELECT user_id FROM documents WHERE id = $1', [id]);
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found.' });
+    }
+    if (existing.rows[0].user_id !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
+    // Permanent delete: actually remove from database (cascade deletes blocks)
+    const result = await query(
+      'DELETE FROM documents WHERE id = $1 AND deleted_at IS NOT NULL',
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: 'Document not found in trash.' });
+    }
+
+    res.status(200).json({ success: true, message: 'Document permanently deleted.' });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   getDocuments,
   createDocument,
@@ -276,4 +361,7 @@ module.exports = {
   disableSharing,
   getSharedDocument,
   searchDocuments,
+  getTrashedDocuments,
+  restoreDocument,
+  permanentDeleteDocument,
 };

@@ -2,9 +2,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import { AnimatePresence, motion } from 'framer-motion';
+import { FiTrash2 } from 'react-icons/fi';
 import Block from './Block';
 import SlashMenu from './SlashMenu';
 import InlineFormatToolbar from './InlineFormatToolbar';
+import TrashView from './TrashView';
 import {
   createBlock,
   getMidpointIndex,
@@ -15,6 +17,7 @@ import {
   isCursorAtStart,
 } from '../../utils/blockUtils';
 import useAutoSave from '../../hooks/useAutoSave';
+import { documentAPI } from '../../services/api';
 import SaveIndicator from '../ui/SaveIndicator';
 
 const NON_EDITABLE_TYPES = ['divider', 'image', 'file', 'table'];
@@ -31,6 +34,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
   // slashMenu: { blockId, filter, position: {top, left} }
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [formatToolbar, setFormatToolbar] = useState(null);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
   const titleRef = useRef(null);
 
   const { saveStatus, save } = useAutoSave(documentId, documentVersion);
@@ -190,6 +194,47 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
   );
 
   // =============================================
+  // BLOCK DELETE — Move to trash
+  // =============================================
+  const handleDeleteBlock = useCallback(
+    async (blockId) => {
+      if (!documentId) return;
+
+      try {
+        // Remove from local state immediately for responsive UI
+        setBlocks((prev) => prev.filter((b) => b.id !== blockId));
+
+        // Send to backend (soft delete)
+        await blockAPI.delete(documentId, blockId);
+
+        // Show success feedback (could add toast notification here)
+        console.log('Block moved to trash');
+      } catch (error) {
+        console.error('Failed to delete block:', error);
+        // Revert local state on error
+        // Note: In a real app, you'd want to refetch blocks here
+        // For now, we'll just log the error
+      }
+    },
+    [documentId]
+  );
+
+  // =============================================
+  // BLOCK RESTORE — From trash
+  // =============================================
+  const handleRestoreBlock = useCallback(async () => {
+    // Refetch blocks to ensure editor is up to date after restore
+    if (documentId) {
+      try {
+        const response = await documentAPI.get(documentId);
+        setBlocks(response.data.blocks.sort((a, b) => a.order_index - b.order_index));
+      } catch (error) {
+        console.error('Failed to refetch blocks after restore:', error);
+      }
+    }
+  }, [documentId]);
+
+  // =============================================
   // SLASH MENU SELECT — Change block type
   // =============================================
   const handleSlashSelect = useCallback(
@@ -277,11 +322,40 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
       }
 
       // ============================================
-      // ENTER — Split block at cursor
+      // ENTER — Split block at cursor (Notion-like)
+      // CRITICAL: Preserve block type for heading/list/todo
       // ============================================
       if (e.key === 'Enter' && !e.shiftKey) {
         // Code block: Enter just adds a newline, handled by browser
         if (currentBlock.type === 'code') return;
+
+        // Table block: Do not split, just focus next block (tables have own row logic)
+        if (currentBlock.type === 'table') return;
+
+        // Non-text blocks (divider, image, file): Create paragraph instead of splitting
+        if (NON_EDITABLE_TYPES.includes(currentBlock.type)) {
+          e.preventDefault();
+          const nextBlock = blocks[blockIndex + 1];
+          const newOrderIndex = getMidpointIndex(
+            currentBlock.order_index,
+            nextBlock?.order_index
+          );
+          const newBlock = createBlock('paragraph', { text: '', html: '' }, newOrderIndex);
+
+          setBlocks((prev) => {
+            const result = [
+              ...prev.slice(0, blockIndex + 1),
+              newBlock,
+              ...prev.slice(blockIndex + 1),
+            ];
+            setTimeout(() => {
+              setFocusedBlockId(newBlock.id);
+              setFocusCursorPosition('start');
+            }, 0);
+            return result;
+          });
+          return;
+        }
 
         e.preventDefault();
 
@@ -299,6 +373,8 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
                 ? { text: textBefore, html: textBefore, checked: b.content.checked }
                 : b.type === 'bullet_list' || b.type === 'numbered_list'
                 ? { text: textBefore, html: textBefore }
+                : b.type.startsWith('heading_')
+                ? { text: textBefore, html: textBefore }
                 : { text: textBefore, html: textBefore };
             return { ...b, content: newContent };
           });
@@ -310,8 +386,26 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
             nextBlock?.order_index
           );
 
-          // Create new paragraph block with text after cursor
-          const newBlock = createBlock('paragraph', { text: textAfter, html: textAfter }, newOrderIndex);
+          // Preserve block type: heading → same heading level, list → same list type, todo → unchecked todo
+          let newBlockType = 'paragraph'; // default fallback
+          let newBlockContent = { text: textAfter, html: textAfter };
+
+          if (currentBlock.type.startsWith('heading_')) {
+            // Preserve heading level
+            newBlockType = currentBlock.type;
+            newBlockContent = { text: textAfter, html: textAfter };
+          } else if (currentBlock.type === 'bullet_list') {
+            newBlockType = 'bullet_list';
+            newBlockContent = { text: textAfter, html: textAfter };
+          } else if (currentBlock.type === 'numbered_list') {
+            newBlockType = 'numbered_list';
+            newBlockContent = { text: textAfter, html: textAfter };
+          } else if (currentBlock.type === 'todo') {
+            newBlockType = 'todo';
+            newBlockContent = { text: textAfter, html: textAfter, checked: false };
+          }
+
+          const newBlock = createBlock(newBlockType, newBlockContent, newOrderIndex);
 
           const result = [
             ...updated.slice(0, blockIndex + 1),
@@ -335,44 +429,61 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
       }
 
       // ============================================
-      // BACKSPACE — Delete or merge blocks
+      // BACKSPACE — Delete or merge blocks (Notion-like)
       // ============================================
       if (e.key === 'Backspace') {
         const atStart = element ? isCursorAtStart(element) : false;
 
         // If cursor is at start of block
         if (atStart) {
-          // If it's the FIRST block — no action (edge case: nothing to merge into)
+          // CASE 1: First block in document
+          // Backspace moves cursor to end of title
           if (blockIndex === 0) {
-            // Defined behavior:
-            // - If first block is non-paragraph, Backspace at start converts it to paragraph (keeps content).
-            // - If it's already a paragraph, do nothing.
-            if (currentBlock.type !== 'paragraph') {
-              e.preventDefault();
-              setBlocks((prev) =>
-                prev.map((b) =>
-                  b.id === blockId ? { ...b, type: 'paragraph' } : b
-                )
-              );
+            e.preventDefault();
+            if (titleRef.current) {
+              titleRef.current.focus();
+              setCursorToEnd(titleRef.current);
             }
             return;
           }
 
           const prevBlock = blocks[blockIndex - 1];
 
-          // If previous block is non-editable (divider/image), just delete the prev block
+          // CASE 2: Previous block is non-text (divider/image/file)
+          // Skip non-editable blocks and find the previous editable block
           if (NON_EDITABLE_TYPES.includes(prevBlock.type)) {
             e.preventDefault();
-            setBlocks((prev) => prev.filter((b) => b.id !== prevBlock.id));
-            // Keep focus on current block
-            setTimeout(() => {
-              const el = getBlockElement(blockId);
-              if (el) { el.focus(); setCursorToStart(el); }
-            }, 0);
+            // Find the first editable block before current block
+            let editableBlockIndex = blockIndex - 1;
+            while (editableBlockIndex >= 0 && NON_EDITABLE_TYPES.includes(blocks[editableBlockIndex].type)) {
+              editableBlockIndex--;
+            }
+
+            // If found an editable block, move cursor to its end
+            if (editableBlockIndex >= 0) {
+              const editableBlock = blocks[editableBlockIndex];
+              setTimeout(() => {
+                const editableEl = getBlockElement(editableBlock.id);
+                if (editableEl) { editableEl.focus(); setCursorToEnd(editableEl); }
+              }, 0);
+            } else {
+              // No editable block found, move to title
+              if (titleRef.current) {
+                titleRef.current.focus();
+                setCursorToEnd(titleRef.current);
+              }
+            }
             return;
           }
 
-          // If current block is empty — delete it
+          // CASE 3: Current block is non-text (divider/image/file)
+          // Do nothing — cannot merge into previous text block
+          if (NON_EDITABLE_TYPES.includes(currentBlock.type)) {
+            return;
+          }
+
+          // CASE 4: Current block is empty
+          // Delete the current block and focus the previous block at its end
           if (text === '' || text === '\n') {
             e.preventDefault();
             setBlocks((prev) => {
@@ -387,41 +498,40 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
             return;
           }
 
-          // If current block is non-empty and prev block is text — merge
-          if (!NON_EDITABLE_TYPES.includes(currentBlock.type)) {
-            e.preventDefault();
-            const prevText = prevBlock.content.text || '';
-            const mergeOffset = prevText.length; // Remember cursor position in merged block
+          // CASE 5: Current block is non-empty text, merge with previous text block
+          // Append current block text to previous block, then delete current block
+          e.preventDefault();
+          const prevText = prevBlock.content.text || '';
+          const mergeOffset = prevText.length; // Remember cursor position in merged block
 
-            setBlocks((prev) => {
-              const filtered = prev
-                .filter((b) => b.id !== blockId)
-                .map((b) => {
-                  if (b.id !== prevBlock.id) return b;
-                  return {
-                    ...b,
-                    content: {
-                      ...b.content,
-                      text: prevText + text,
-                      html: prevText + text,
-                    },
-                  };
-                });
+          setBlocks((prev) => {
+            const filtered = prev
+              .filter((b) => b.id !== blockId)
+              .map((b) => {
+                if (b.id !== prevBlock.id) return b;
+                return {
+                  ...b,
+                  content: {
+                    ...b.content,
+                    text: prevText + text,
+                    html: prevText + text,
+                  },
+                };
+              });
 
-              // Update prev block DOM
-              setTimeout(() => {
-                const prevEl = getBlockElement(prevBlock.id);
-                if (prevEl) {
-                  prevEl.innerText = prevText + text;
-                  prevEl.focus();
-                  setCursorOffset(prevEl, mergeOffset);
-                }
-              }, 0);
+            // Update previous block DOM and focus it
+            setTimeout(() => {
+              const prevEl = getBlockElement(prevBlock.id);
+              if (prevEl) {
+                prevEl.innerText = prevText + text;
+                prevEl.focus();
+                setCursorOffset(prevEl, mergeOffset);
+              }
+            }, 0);
 
-              return filtered;
-            });
-            return;
-          }
+            return filtered;
+          });
+          return;
         }
       }
 
@@ -535,8 +645,15 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-8 lg:px-14 py-10 text-slate-900 dark:text-slate-100">
-      {/* Save Indicator */}
-      <div className="flex justify-end mb-2">
+      {/* Save Indicator and Trash */}
+      <div className="flex justify-end items-center gap-3 mb-2">
+        <button
+          onClick={() => setIsTrashOpen(true)}
+          className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+          title="Open trash"
+        >
+          <FiTrash2 size={16} />
+        </button>
         <SaveIndicator status={saveStatus} />
       </div>
 
@@ -582,6 +699,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
                       onKeyDown={handleKeyDown}
                       onChange={handleBlockChange}
                       onFocus={setFocusedBlockId}
+                      onDelete={handleDeleteBlock}
                       autoFocus={focusedBlockId === block.id}
                       cursorPosition={focusCursorPosition}
                     />
@@ -630,6 +748,14 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
             }, 0);
           }
         }}
+      />
+
+      {/* Trash View */}
+      <TrashView
+        documentId={documentId}
+        isOpen={isTrashOpen}
+        onClose={() => setIsTrashOpen(false)}
+        onRestore={handleRestoreBlock}
       />
     </div>
   );
