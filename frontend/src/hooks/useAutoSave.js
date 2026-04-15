@@ -1,16 +1,19 @@
 // frontend/src/hooks/useAutoSave.js
 import { useRef, useCallback, useState, useEffect } from 'react';
-import { blockAPI } from '../services/api';
+import { blockAPI, documentAPI } from '../services/api';
 import { renormalizeBlocks, needsRenormalization } from '../utils/blockUtils';
+import toast from 'react-hot-toast';
 
 const SAVE_DELAY = 1000; // 1 second debounce
 
-const useAutoSave = (documentId, initialVersion) => {
+const useAutoSave = (documentId, initialVersion, onStaleWrite = null) => {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
   const saveTimer = useRef(null);
   const abortControllerRef = useRef(null);
   const pendingVersionRef = useRef(0);     // Client-side version counter
   const serverVersionRef = useRef(initialVersion);
+  const conflictRetryRef = useRef(0);      // Track retry attempts
+  const MAX_CONFLICT_RETRIES = 3;          // Max retries for conflicts
 
   useEffect(() => {
     if (initialVersion !== undefined && serverVersionRef.current === undefined) {
@@ -59,6 +62,7 @@ const useAutoSave = (documentId, initialVersion) => {
           if (thisVersion === pendingVersionRef.current) {
             serverVersionRef.current = data.version;
             setSaveStatus('saved');
+            conflictRetryRef.current = 0; // Reset retry counter on success
           }
         } catch (err) {
           if (err.name === 'CanceledError' || err.name === 'AbortError') {
@@ -66,10 +70,55 @@ const useAutoSave = (documentId, initialVersion) => {
             return;
           }
           if (err.response?.status === 409) {
-            // Stale write detected — server rejected it
-            console.warn('[AutoSave] Stale write rejected:', err.response.data.message);
-            serverVersionRef.current = err.response.data.currentVersion;
-            setSaveStatus('error');
+            // Stale write detected — need to fetch fresh state from server
+            console.warn('[AutoSave] Conflict detected. Fetching fresh document state...');
+
+            try {
+              // Fetch the current document state from server to reconcile
+              const freshDoc = await documentAPI.get(documentId);
+              serverVersionRef.current = freshDoc.data.document.version;
+
+              // Notify parent component about stale write so it can update blocks
+              if (onStaleWrite) {
+                onStaleWrite(freshDoc.data.blocks, freshDoc.data.document.version);
+              }
+
+              // If we have more edits pending, retry the save
+              if (conflictRetryRef.current < MAX_CONFLICT_RETRIES && thisVersion === pendingVersionRef.current) {
+                conflictRetryRef.current++;
+                setSaveStatus('saving');
+                // Retry after brief delay
+                setTimeout(() => {
+                  const retryController = new AbortController();
+                  abortControllerRef.current = retryController;
+
+                  blockAPI.batchSave(
+                    documentId,
+                    blocksToSave,
+                    serverVersionRef.current
+                  ).then(({ data }) => {
+                    if (thisVersion === pendingVersionRef.current) {
+                      serverVersionRef.current = data.version;
+                      setSaveStatus('saved');
+                      conflictRetryRef.current = 0;
+                    }
+                  }).catch((retryErr) => {
+                    if (retryErr.response?.status !== 409) {
+                      console.error('[AutoSave] Retry failed:', retryErr.message);
+                      setSaveStatus('error');
+                    }
+                  });
+                }, 500);
+              } else {
+                setSaveStatus('error');
+                if (conflictRetryRef.current >= MAX_CONFLICT_RETRIES) {
+                  toast.error('Could not save changes due to conflicts. Please refresh.');
+                }
+              }
+            } catch (freshErr) {
+              console.error('[AutoSave] Failed to fetch fresh state:', freshErr.message);
+              setSaveStatus('error');
+            }
           } else {
             console.error('[AutoSave] Save failed:', err.message);
             setSaveStatus('error');
@@ -95,7 +144,20 @@ const useAutoSave = (documentId, initialVersion) => {
         const { data } = await blockAPI.batchSave(documentId, blocksToSave, serverVersionRef.current);
         serverVersionRef.current = data.version;
         setSaveStatus('saved');
+        conflictRetryRef.current = 0;
       } catch (err) {
+        if (err.response?.status === 409) {
+          // Refresh from server on conflict
+          try {
+            const freshDoc = await documentAPI.get(documentId);
+            serverVersionRef.current = freshDoc.data.document.version;
+            if (onStaleWrite) {
+              onStaleWrite(freshDoc.data.blocks, freshDoc.data.document.version);
+            }
+          } catch (freshErr) {
+            console.error('[AutoSave] Failed to fetch fresh state:', freshErr.message);
+          }
+        }
         setSaveStatus('error');
         throw err;
       }

@@ -17,7 +17,7 @@ import {
   isCursorAtStart,
 } from '../../utils/blockUtils';
 import useAutoSave from '../../hooks/useAutoSave';
-import { documentAPI } from '../../services/api';
+import { blockAPI, documentAPI } from '../../services/api';
 import SaveIndicator from '../ui/SaveIndicator';
 
 const NON_EDITABLE_TYPES = ['divider', 'image', 'file', 'table'];
@@ -37,7 +37,15 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const titleRef = useRef(null);
 
-  const { saveStatus, save } = useAutoSave(documentId, documentVersion);
+  // Handle stale writes by reconciling server state
+  const handleStaleWrite = useCallback((freshBlocks, freshVersion) => {
+    console.log('[BlockEditor] Reconciling with fresh blocks from server');
+    setBlocks(
+      [...freshBlocks].sort((a, b) => a.order_index - b.order_index)
+    );
+  }, []);
+
+  const { saveStatus, save } = useAutoSave(documentId, documentVersion, handleStaleWrite);
 
   // Auto-save whenever blocks change
   useEffect(() => {

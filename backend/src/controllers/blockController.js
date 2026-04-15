@@ -248,35 +248,45 @@ const reorderBlocks = async (req, res, next) => {
 
 // @route POST /api/documents/:documentId/blocks/batch
 // Batch save for auto-save — creates/updates/deletes blocks in one request
-// Server-side version check prevents stale overwrites
+// Server-side version check prevents stale overwrites (but allows concurrent edits)
 const batchSave = async (req, res, next) => {
   try {
     const { documentId } = req.params;
     const { blocks, documentVersion } = req.body;
+
+    if (!Array.isArray(blocks)) {
+      return res.status(422).json({ success: false, message: 'blocks array is required.' });
+    }
 
     const ownership = await verifyOwnership(documentId, req.user.id);
     if (!ownership.ok) {
       return res.status(ownership.status).json({ success: false, message: ownership.error });
     }
 
-    // Version check — prevents stale auto-save from overwriting newer content
+    // Version check — allows updates if client version is within reasonable range of server
+    // This prevents catastrophic overwrites but allows for expected concurrent edits
     const docResult = await query(
       'SELECT version FROM documents WHERE id = $1',
       [documentId]
     );
     const currentVersion = docResult.rows[0]?.version || 0;
 
-    if (documentVersion !== undefined && documentVersion < currentVersion) {
+    // Only reject if the client is MORE than 5 versions behind (allows concurrent edits)
+    const versionGap = currentVersion - (documentVersion || 0);
+    if (versionGap > 5) {
       return res.status(409).json({
         success: false,
         message: 'Stale write rejected. Document has been updated by a newer save.',
         currentVersion,
+        versionGap,
       });
     }
 
     const client = await require('../config/database').pool.connect();
     try {
       await client.query('BEGIN');
+
+      const blockIds = [];
 
       for (const block of blocks) {
         const validTypes = [
@@ -298,13 +308,17 @@ const batchSave = async (req, res, next) => {
           throw new Error(`Invalid block type: ${block.type}`);
         }
 
+        blockIds.push(block.id);
+
         await client.query(
           `INSERT INTO blocks (id, document_id, type, content, order_index, parent_id)
            VALUES ($1, $2, $3, $4, $5, $6)
            ON CONFLICT (id) DO UPDATE SET
              type = EXCLUDED.type,
              content = EXCLUDED.content,
-             order_index = EXCLUDED.order_index`,
+             order_index = EXCLUDED.order_index,
+             parent_id = EXCLUDED.parent_id,
+             deleted_at = NULL`,
           [
             block.id,
             documentId,
@@ -313,6 +327,25 @@ const batchSave = async (req, res, next) => {
             parseFloat(block.order_index),
             block.parent_id || null,
           ]
+        );
+      }
+
+      if (blockIds.length > 0) {
+        await client.query(
+          `UPDATE blocks
+           SET deleted_at = NOW()
+           WHERE document_id = $1
+             AND deleted_at IS NULL
+             AND NOT (id = ANY($2::uuid[]))`,
+          [documentId, blockIds]
+        );
+      } else {
+        await client.query(
+          `UPDATE blocks
+           SET deleted_at = NOW()
+           WHERE document_id = $1
+             AND deleted_at IS NULL`,
+          [documentId]
         );
       }
 

@@ -4,17 +4,28 @@ const { Pool } = require('pg');
 const fs = require('fs/promises');
 const path = require('path');
 
+const databaseURL = process.env.DATABASE_URL || process.env.DB_URL;
+const useSSL = process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production';
+
+const poolConfig = databaseURL
+  ? {
+      connectionString: databaseURL,
+      ssl: useSSL ? { rejectUnauthorized: false } : false,
+    }
+  : {
+      host: process.env.DB_HOST || process.env.PGHOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || process.env.PGPORT, 10) || 5432,
+      database: process.env.DB_NAME || process.env.PGDATABASE,
+      user: process.env.DB_USER || process.env.PGUSER,
+      password: process.env.DB_PASSWORD || process.env.PGPASSWORD,
+      ssl: useSSL ? { rejectUnauthorized: false } : false,
+    };
+
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT, 10) || 5432,
-  database: process.env.DB_NAME,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
+  ...poolConfig,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-  // Add SCRAM authentication support
   allowExitOnIdle: true,
 });
 
@@ -52,7 +63,7 @@ const connectDB = async () => {
       console.log('✅ Database schema initialized');
     }
   } catch (err) {
-    console.error('❌ PostgreSQL connection failed:', err.message);
+    console.error('❌ PostgreSQL connection failed:', err.message || err);
     process.exit(1);
   }
 };

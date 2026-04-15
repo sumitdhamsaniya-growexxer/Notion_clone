@@ -26,13 +26,18 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-  : ['http://localhost:3000', 'http://localhost:5173'];
+  : ['http://localhost:3000', 'http://localhost:5173' , 'https://frontend-delta-red-27.vercel.app'];
 
 app.use(cors({
   origin: (origin, cb) => {
     const isLocalhostOrigin = typeof origin === 'string'
       && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin);
-    if (!origin || allowedOrigins.includes(origin) || isLocalhostOrigin) {
+
+    // In production, also accept any railway.app domain
+    const isRailwayOrigin = typeof origin === 'string'
+      && origin.includes('.railway.app');
+
+    if (!origin || allowedOrigins.includes(origin) || isLocalhostOrigin || isRailwayOrigin) {
       return cb(null, true);
     }
     // Reject cross-origin without throwing server errors.

@@ -1,7 +1,20 @@
 // frontend/src/services/api.js
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const normalizeBaseURL = (value) => {
+  const raw = (value || '').trim();
+  if (!raw) return 'http://localhost:5000/api';
+
+  const withProtocol = /^https?:\/\//i.test(raw)
+    ? raw
+    : raw.startsWith('localhost') || raw.startsWith('127.0.0.1')
+      ? `http://${raw}`
+      : `https://${raw}`;
+
+  return withProtocol.replace(/\/?$/, '').replace(/\/api\/?$/, '') + '/api';
+};
+
+const BASE_URL = normalizeBaseURL(import.meta.env.VITE_API_URL);
 const MAX_LOCAL_PORT_SCAN = 10;
 
 const toHealthURL = (baseURL) => baseURL.replace(/\/api\/?$/, '/health');

@@ -12,19 +12,31 @@ export const createBlock = (type = 'paragraph', content = {}, orderIndex) => ({
   parent_id: null,
 });
 
+const toNumber = (value) => {
+  if (value === undefined || value === null) return undefined;
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 // Calculate order_index for a new block inserted between prev and next
 // Uses midpoint — FLOAT as per spec
 export const getMidpointIndex = (prevIndex, nextIndex) => {
-  if (prevIndex === undefined && nextIndex === undefined) return 1000.0;
-  if (prevIndex === undefined) return nextIndex - 1000.0;
-  if (nextIndex === undefined) return prevIndex + 1000.0;
-  return (prevIndex + nextIndex) / 2;
+  const prev = toNumber(prevIndex);
+  const next = toNumber(nextIndex);
+
+  if (prev === undefined && next === undefined) return 1000.0;
+  if (prev === undefined) return next - 1000.0;
+  if (next === undefined) return prev + 1000.0;
+  return (prev + next) / 2;
 };
 
 // Check if gap between two consecutive blocks is dangerously small
 export const needsRenormalization = (blocks) => {
   for (let i = 0; i < blocks.length - 1; i++) {
-    const gap = blocks[i + 1].order_index - blocks[i].order_index;
+    const current = toNumber(blocks[i].order_index);
+    const next = toNumber(blocks[i + 1].order_index);
+    if (current === undefined || next === undefined) continue;
+    const gap = next - current;
     if (gap < 0.001) return true;
   }
   return false;
