@@ -184,7 +184,17 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
   const handleBlockChange = useCallback(
     (blockId, newContent) => {
       setBlocks((prev) =>
-        prev.map((b) => (b.id === blockId ? { ...b, content: newContent } : b))
+        prev.map((b) =>
+          b.id === blockId
+            ? {
+                ...b,
+                content:
+                  slashMenu?.blockId === blockId
+                    ? { text: '', html: '' }
+                    : newContent,
+              }
+            : b
+        )
       );
 
       // Slash menu filter update
@@ -192,7 +202,7 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
         const text = newContent.text || '';
         const slashIdx = text.lastIndexOf('/');
         if (slashIdx !== -1) {
-          setSlashMenu((prev) => prev ? { ...prev, filter: text.slice(slashIdx + 1) } : null);
+          setSlashMenu((prev) => (prev ? { ...prev, filter: text.slice(slashIdx + 1) } : null));
         } else {
           closeSlashMenu();
         }
@@ -311,8 +321,12 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
       // While slash menu is open for this block, capture typing into menu filter
       // and keep block content empty (no bleed).
       if (slashMenu?.blockId === blockId) {
+        e.preventDefault();
+        if (element) {
+          element.innerText = '';
+        }
+
         if (e.key === 'Backspace') {
-          e.preventDefault();
           setSlashMenu((prev) => {
             if (!prev) return null;
             const next = prev.filter.slice(0, -1);
@@ -323,10 +337,12 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
 
         // Printable characters: update filter only.
         if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-          e.preventDefault();
           setSlashMenu((prev) => (prev ? { ...prev, filter: prev.filter + e.key } : prev));
           return;
         }
+
+        // For any other key while slash menu is open, keep the block empty
+        return;
       }
 
       // ============================================
@@ -506,39 +522,19 @@ const BlockEditor = ({ documentId, initialBlocks = [], documentVersion, document
             return;
           }
 
-          // CASE 5: Current block is non-empty text, merge with previous text block
-          // Append current block text to previous block, then delete current block
+          // CASE 5: Current block is non-empty text, convert to paragraph instead of merging
+          // Change block type to paragraph (no merge behavior)
           e.preventDefault();
-          const prevText = prevBlock.content.text || '';
-          const mergeOffset = prevText.length; // Remember cursor position in merged block
-
-          setBlocks((prev) => {
-            const filtered = prev
-              .filter((b) => b.id !== blockId)
-              .map((b) => {
-                if (b.id !== prevBlock.id) return b;
-                return {
-                  ...b,
-                  content: {
-                    ...b.content,
-                    text: prevText + text,
-                    html: prevText + text,
-                  },
-                };
-              });
-
-            // Update previous block DOM and focus it
-            setTimeout(() => {
-              const prevEl = getBlockElement(prevBlock.id);
-              if (prevEl) {
-                prevEl.innerText = prevText + text;
-                prevEl.focus();
-                setCursorOffset(prevEl, mergeOffset);
-              }
-            }, 0);
-
-            return filtered;
-          });
+          if (currentBlock.type !== 'paragraph') {
+            setBlocks((prev) =>
+              prev.map((b) =>
+                b.id === blockId
+                  ? { ...b, type: 'paragraph', content: { ...b.content } }
+                  : b
+              )
+            );
+          }
+          // If already a paragraph, do nothing (no merge)
           return;
         }
       }

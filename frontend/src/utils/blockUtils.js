@@ -8,7 +8,7 @@ export const createBlock = (type = 'paragraph', content = {}, orderIndex) => ({
   content: type === 'todo'
     ? { text: '', html: '', checked: false, ...content }
     : { text: '', html: '', ...content },
-  order_index: orderIndex,
+  order_index: orderIndex !== undefined ? parseFloat(orderIndex) : undefined,
   parent_id: null,
 });
 
@@ -18,6 +18,11 @@ const toNumber = (value) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const toFloat = (value) => {
+  const num = toNumber(value);
+  return num === undefined ? undefined : parseFloat(num.toFixed(10));
+};
+
 // Calculate order_index for a new block inserted between prev and next
 // Uses midpoint — FLOAT as per spec
 export const getMidpointIndex = (prevIndex, nextIndex) => {
@@ -25,9 +30,10 @@ export const getMidpointIndex = (prevIndex, nextIndex) => {
   const next = toNumber(nextIndex);
 
   if (prev === undefined && next === undefined) return 1000.0;
-  if (prev === undefined) return next - 1000.0;
-  if (next === undefined) return prev + 1000.0;
-  return (prev + next) / 2;
+  if (prev === undefined) return toFloat(next - 1000.0);
+  if (next === undefined) return toFloat(prev + 1000.0);
+
+  return toFloat((prev + next) / 2);
 };
 
 // Check if gap between two consecutive blocks is dangerously small
@@ -46,7 +52,7 @@ export const needsRenormalization = (blocks) => {
 export const renormalizeBlocks = (blocks) => {
   return blocks.map((block, i) => ({
     ...block,
-    order_index: (i + 1) * 1000.0,
+    order_index: parseFloat(((i + 1) * 1000.0).toFixed(10)),
   }));
 };
 
@@ -164,7 +170,6 @@ export const BLOCK_TYPES = [
   { type: 'table', label: 'Table', description: 'Insert a basic editable table', icon: '▦', keywords: ['table', 'grid', 'rows', 'columns'] },
   { type: 'todo', label: 'To-do', description: 'Track tasks with checkbox', icon: '☑', keywords: ['todo', 'task', 'check', 'checkbox'] },
   { type: 'code', label: 'Code', description: 'Capture code snippet', icon: '<>', keywords: ['code', 'snippet', 'pre'] },
-  { type: 'file', label: 'Attach file', description: 'Upload and attach a file', icon: '📎', keywords: ['file', 'attach', 'upload'] },
   { type: 'divider', label: 'Divider', description: 'Horizontal divider line', icon: '—', keywords: ['divider', 'hr', 'separator', 'line'] },
   { type: 'image', label: 'Image', description: 'Embed image from URL', icon: '🖼', keywords: ['image', 'img', 'photo', 'picture', 'url'] },
 ];

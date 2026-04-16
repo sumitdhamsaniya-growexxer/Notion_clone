@@ -4,7 +4,7 @@ A browser-based block document editor built from scratch. No Tiptap, Slate, or P
 Uses contenteditable for all text blocks.
 
 ## Live URL
-https://your-deployed-url.com
+https://frontend-delta-red-27.vercel.app/
 
 ## Setup (Docker — Recommended)
 

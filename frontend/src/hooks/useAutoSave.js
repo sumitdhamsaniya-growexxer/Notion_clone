@@ -55,7 +55,8 @@ const useAutoSave = (documentId, initialVersion, onStaleWrite = null) => {
           const { data } = await blockAPI.batchSave(
             documentId,
             blocksToSave,
-            serverVersionRef.current
+            serverVersionRef.current,
+            { signal: controller.signal }
           );
 
           // Only update if this save is still the latest
@@ -95,7 +96,8 @@ const useAutoSave = (documentId, initialVersion, onStaleWrite = null) => {
                   blockAPI.batchSave(
                     documentId,
                     blocksToSave,
-                    serverVersionRef.current
+                    serverVersionRef.current,
+                    { signal: retryController.signal }
                   ).then(({ data }) => {
                     if (thisVersion === pendingVersionRef.current) {
                       serverVersionRef.current = data.version;

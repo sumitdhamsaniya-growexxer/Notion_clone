@@ -21,17 +21,40 @@ const toHealthURL = (baseURL) => baseURL.replace(/\/api\/?$/, '/health');
 
 const getCandidateBaseURLs = () => {
   try {
+    const localHostNames = ['localhost', '127.0.0.1'];
+    const isCurrentlyLocal = localHostNames.includes(window.location.hostname);
     const url = new URL(BASE_URL);
-    const isLocalHost = ['localhost', '127.0.0.1'].includes(url.hostname);
-    const port = Number(url.port);
+    const isLocalHostBase = localHostNames.includes(url.hostname);
 
-    if (!isLocalHost || !port) return [BASE_URL];
+    const candidates = [];
 
-    return Array.from({ length: MAX_LOCAL_PORT_SCAN + 1 }, (_, i) => {
-      const next = new URL(url.toString());
-      next.port = String(port + i);
-      return next.toString().replace(/\/$/, '');
-    });
+    // 1. If we are browsing on localhost, prioritize common local backend ports (5000-5010)
+    if (isCurrentlyLocal) {
+      for (let i = 0; i <= MAX_LOCAL_PORT_SCAN; i++) {
+        candidates.push(`http://localhost:${5000 + i}/api`);
+      }
+    }
+
+    // 2. Add the configured BASE_URL as a candidate
+    if (!candidates.includes(BASE_URL)) {
+      candidates.push(BASE_URL);
+    }
+
+    // 3. If BASE_URL was already localhost, add its neighboring ports as well
+    if (isLocalHostBase && url.port) {
+      const startPort = Number(url.port);
+      for (let i = 1; i <= MAX_LOCAL_PORT_SCAN; i++) {
+        const next = new URL(url.toString());
+        next.port = String(startPort + i);
+        const candidate = next.toString().replace(/\/$/, '');
+        if (!candidates.includes(candidate)) {
+          candidates.push(candidate);
+        }
+      }
+    }
+
+    // Remove duplicates while preserving priority order
+    return Array.from(new Set(candidates));
   } catch {
     return [BASE_URL];
   }
@@ -45,9 +68,12 @@ const resolveBaseURL = async () => {
 
   for (const candidate of candidates) {
     try {
-      await axios.get(toHealthURL(candidate), { timeout: 1200 });
-      resolvedBaseURL = candidate;
-      return resolvedBaseURL;
+      const res = await axios.get(toHealthURL(candidate), { timeout: 1200 });
+      // Verify this is the CORRECT backend for this project
+      if (res.data?.success && res.data?.project === 'notion-clone') {
+        resolvedBaseURL = candidate;
+        return resolvedBaseURL;
+      }
     } catch {
       // Try next port candidate.
     }
@@ -72,6 +98,14 @@ const api = axios.create({
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
+
+const isAuthEndpoint = (config) => {
+  const url = config?.url || '';
+  return url.includes('/auth/login')
+    || url.includes('/auth/register')
+    || url.includes('/auth/refresh')
+    || url.includes('/auth/logout');
+};
 
 // Attach access token to every request
 api.interceptors.request.use(async (config) => {
@@ -102,7 +136,7 @@ api.interceptors.response.use(
 
     if (
       error.response?.status === 401 &&
-      error.response?.data?.code === 'TOKEN_EXPIRED' &&
+      !isAuthEndpoint(originalRequest) &&
       !originalRequest._retry
     ) {
       if (isRefreshing) {
@@ -121,6 +155,10 @@ api.interceptors.response.use(
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) {
+          throw error;
+        }
+
         await ensureBaseURL();
         const { data } = await axios.post(`${resolvedBaseURL}/auth/refresh`, { refreshToken });
         localStorage.setItem('accessToken', data.accessToken);
@@ -175,8 +213,8 @@ export const blockAPI = {
   update: (docId, blockId, data) => api.patch(`/documents/${docId}/blocks/${blockId}`, data),
   delete: (docId, blockId) => api.delete(`/documents/${docId}/blocks/${blockId}`),
   reorder: (docId, blocks) => api.post(`/documents/${docId}/blocks/reorder`, { blocks }),
-  batchSave: (docId, blocks, version) =>
-    api.post(`/documents/${docId}/blocks/batch`, { blocks, documentVersion: version }),
+  batchSave: (docId, blocks, version, options = {}) =>
+    api.post(`/documents/${docId}/blocks/batch`, { blocks, documentVersion: version }, options),
   // Trash functionality
   getTrashed: (docId) => api.get(`/documents/${docId}/blocks/trash`),
   restore: (docId, blockId) => api.post(`/documents/${docId}/blocks/${blockId}/restore`),

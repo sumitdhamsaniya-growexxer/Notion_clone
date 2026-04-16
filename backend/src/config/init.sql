@@ -85,7 +85,12 @@ CREATE TRIGGER update_blocks_updated_at
   BEFORE UPDATE ON blocks
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Valid block types constraint
+-- Handle existing file blocks before applying new constraint
+UPDATE blocks SET type = 'paragraph', content = '{"text": "File attachment removed"}' WHERE type = 'file';
+
+-- Drop existing constraint if it exists
 ALTER TABLE blocks DROP CONSTRAINT IF EXISTS blocks_type_check;
+
+-- Valid block types constraint (removed 'file' type)
 ALTER TABLE blocks ADD CONSTRAINT blocks_type_check
-  CHECK (type IN ('paragraph','heading_1','heading_2','heading_3','heading_4','bullet_list','numbered_list','table','todo','code','file','divider','image'));
+  CHECK (type IN ('paragraph','heading_1','heading_2','heading_3','heading_4','bullet_list','numbered_list','table','todo','code','divider','image'));

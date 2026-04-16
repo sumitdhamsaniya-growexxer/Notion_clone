@@ -61,7 +61,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check
 app.get('/health', (_, res) => {
-  res.json({ success: true, status: 'healthy', timestamp: new Date().toISOString() });
+  res.json({
+    success: true,
+    status: 'healthy',
+    project: 'notion-clone',
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // Routes
@@ -72,6 +77,45 @@ app.use('/api/documents/:documentId/blocks', blockRoutes);
 // Share route — read-only, no JWT required
 // shareTokenAccess middleware rejects any non-GET at the middleware level
 app.get('/api/share/:token', shareTokenAccess, getSharedDocument);
+
+// Explicitly reject any block mutations attempted with a share token
+// This ensures read-only enforcement at the API level, not just the frontend
+app.post('/api/share/:token/blocks', (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: 'Share token grants read-only access. Block creation is not allowed.',
+  });
+});
+
+app.patch('/api/share/:token/blocks/:blockId', (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: 'Share token grants read-only access. Block updates are not allowed.',
+  });
+});
+
+app.delete('/api/share/:token/blocks/:blockId', (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: 'Share token grants read-only access. Block deletion is not allowed.',
+  });
+});
+
+app.post('/api/share/:token/blocks/reorder', (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: 'Share token grants read-only access. Block reordering is not allowed.',
+  });
+});
+
+app.post('/api/share/:token/blocks/batch', (req, res) => {
+  res.status(403).json({
+    success: false,
+    message: 'Share token grants read-only access. Batch operations are not allowed.',
+  });
+});
+
+// Catch-all rejection for mutations on share document routes
 // Explicitly reject mutations on share routes at the API level
 app.all('/api/share/:token', (req, res) => {
   res.status(403).json({

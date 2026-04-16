@@ -11,7 +11,6 @@ import DividerBlock from './blocks/DividerBlock';
 import ImageBlock from './blocks/ImageBlock';
 import BulletListBlock from './blocks/BulletListBlock';
 import NumberedListBlock from './blocks/NumberedListBlock';
-import FileBlock from './blocks/FileBlock';
 import TableBlock from './blocks/TableBlock';
 
 const BLOCK_COMPONENTS = {
@@ -25,7 +24,6 @@ const BLOCK_COMPONENTS = {
   table: TableBlock,
   todo: TodoBlock,
   code: CodeBlock,
-  file: FileBlock,
   divider: DividerBlock,
   image: ImageBlock,
 };
@@ -51,6 +49,24 @@ const Block = ({
     [block.id, onChange]
   );
 
+  const handleClick = useCallback(() => {
+    onFocus?.(block.id);
+    // Also directly focus the contenteditable element
+    setTimeout(() => {
+      const contentEditable = document.querySelector(`[data-block-id="${block.id}"] [contenteditable]`);
+      if (contentEditable && document.activeElement !== contentEditable) {
+        contentEditable.focus();
+        // Position cursor at end by default
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(contentEditable);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }, 0);
+  }, [block.id, onFocus]);
+
   const handleKeyDown = useCallback(
     (e) => {
       onKeyDown?.(e, block.id, index);
@@ -65,7 +81,7 @@ const Block = ({
       className="block-wrapper relative group flex items-start gap-1 px-2 py-0.5 rounded-xl"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      onClick={() => onFocus?.(block.id)}
+      onClick={handleClick}
     >
       {/* Drag Handle */}
       {!readOnly && (
@@ -140,7 +156,7 @@ const Block = ({
           }`}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
-          onClick={() => onFocus?.(block.id)}
+          onClick={handleClick}
         >
           {/* Drag Handle */}
           <div

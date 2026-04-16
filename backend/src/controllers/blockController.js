@@ -71,7 +71,6 @@ const createBlock = async (req, res, next) => {
       'table',
       'todo',
       'code',
-      'file',
       'divider',
       'image',
     ];
@@ -141,7 +140,6 @@ const updateBlock = async (req, res, next) => {
         'table',
         'todo',
         'code',
-        'file',
         'divider',
         'image',
       ];
@@ -271,14 +269,14 @@ const batchSave = async (req, res, next) => {
     );
     const currentVersion = docResult.rows[0]?.version || 0;
 
-    // Only reject if the client is MORE than 5 versions behind (allows concurrent edits)
+    // Strict version check - prevents any stale write from overwriting newer changes
     const versionGap = currentVersion - (documentVersion || 0);
-    if (versionGap > 5) {
+    if (versionGap !== 0) {
       return res.status(409).json({
         success: false,
-        message: 'Stale write rejected. Document has been updated by a newer save.',
+        message: 'Stale write rejected. Document has been updated by another request.',
         currentVersion,
-        versionGap,
+        expectedVersion: documentVersion,
       });
     }
 
@@ -300,7 +298,6 @@ const batchSave = async (req, res, next) => {
           'table',
           'todo',
           'code',
-          'file',
           'divider',
           'image',
         ];
