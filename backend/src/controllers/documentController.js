@@ -264,7 +264,7 @@ const getSharedDocument = async (req, res, next) => {
     const blocksResult = await query(
       `SELECT id, document_id, type, content, order_index, parent_id
        FROM blocks
-       WHERE document_id = $1
+       WHERE document_id = $1 AND deleted_at IS NULL
        ORDER BY order_index ASC`,
       [doc.id]
     );
