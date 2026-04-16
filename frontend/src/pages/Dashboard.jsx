@@ -7,6 +7,7 @@ import { documentAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { FiPlus, FiTrash2, FiEdit2, FiCheck, FiX, FiFileText, FiLogOut, FiStar, FiShield, FiZap, FiSearch, FiMenu } from 'react-icons/fi';
 import DocumentTrashView from '../components/DocumentTrashView';
+import NotebookIcon from '../components/NotebookIcon';
 import toast from 'react-hot-toast';
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -189,9 +190,7 @@ const Dashboard = () => {
             animate={{ x: 0, opacity: 1 }}
             className="flex items-center gap-2 sm:gap-3 rounded-xl px-1 py-1 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors flex-shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-400 to-cyan-300 text-slate-900 font-bold flex items-center justify-center text-xs">
-              NG
-            </div>
+            <NotebookIcon size={36} />
             <div className="hidden sm:block">
               <p className="font-semibold tracking-tight">NoteGrid</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">Your docs workspace</p>

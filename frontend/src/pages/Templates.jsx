@@ -6,6 +6,7 @@ import { documentAPI, blockAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { FiArrowLeft, FiFileText, FiPlus, FiTrash2, FiMenu } from 'react-icons/fi';
 import { createBlock } from '../utils/blockUtils';
+import NotebookIcon from '../components/NotebookIcon';
 import toast from 'react-hot-toast';
 
 const TEMPLATE_CATEGORIES = [
@@ -127,9 +128,7 @@ const Templates = () => {
             onClick={() => navigate('/')}
             className="flex items-center gap-2 sm:gap-3 rounded-xl px-1 py-1 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors flex-shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-400 to-cyan-300 text-slate-900 font-bold flex items-center justify-center text-xs">
-              NG
-            </div>
+            <NotebookIcon size={36} />
             <div className="hidden sm:block">
               <p className="font-semibold tracking-tight">NoteGrid</p>
               <p className="text-xs text-slate-400">Templates</p>

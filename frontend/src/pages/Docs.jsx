@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiArrowLeft, FiBookOpen, FiSearch, FiCommand, FiMenu } from 'react-icons/fi';
+import NotebookIcon from '../components/NotebookIcon';
 
 const Docs = () => {
   const navigate = useNavigate();
@@ -16,9 +17,7 @@ const Docs = () => {
             onClick={() => navigate('/')}
             className="flex items-center gap-2 sm:gap-3 rounded-xl px-1 py-1 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors flex-shrink-0"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-400 to-cyan-300 text-slate-900 font-bold flex items-center justify-center text-xs">
-              NG
-            </div>
+            <NotebookIcon size={36} />
             <div className="hidden sm:block">
               <p className="font-semibold tracking-tight">NoteGrid</p>
               <p className="text-xs text-slate-400">Docs</p>
